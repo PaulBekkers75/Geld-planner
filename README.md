@@ -1,10 +1,30 @@
 # Geld-planner
 
-Generator voor **Geldplanner.xlsx** — een Excel-cashflow- en budgetruimte-dashboard voor
-Nederlandse particulieren en stellen, in de stijl van een professioneel financieel dashboard
-(KPI-cards, donut- en staafdiagrammen, groen/rood-signalering).
+Twee tools voor hetzelfde cashflow-/budgetruimtemodel, voor Nederlandse particulieren en stellen:
 
-## Gebruik
+* **`Geldplanner.xlsx`** — een Excel-werkmap, gegenereerd door `generate_geldplanner.py`.
+* **`budget-buddy.html`** — **Budget Buddy**, een single-file webapp die volledig lokaal in de
+  browser draait: open het bestand gewoon dubbelklikkend, geen server of installatie nodig. Alle
+  invoer blijft in de browser van de gebruiker; er wordt niets verstuurd of opgeslagen.
+
+Beide gebruiken dezelfde dashboard-stijl: KPI-cards, donut- en staafdiagrammen, groen/rood-signalering.
+
+## Budget Buddy (webapp)
+
+Open `budget-buddy.html` in een browser. Vereist alleen internettoegang voor Chart.js via CDN
+(`cdn.jsdelivr.net`); verder werkt alles offline en client-side.
+
+* 4 tabbladen: Overzicht Cashflow, Statistieken Cashflow, Overzicht Budgetruimte, Statistieken
+  Budgetruimte — zelfde structuur en koppeling als de Excel-versie hierboven.
+* Elke invoerwijziging werkt direct door in de KPI-cards en grafieken (geen "herberekenen"-knop).
+* Donut-grafieken tonen hun legenda naast de grafiek (niet als tekst erin) om overlap te voorkomen.
+* "Exporteer als PDF"-knop gebruikt de browser-printfunctie; de print-stylesheet toont dan alle
+  4 tabbladen achter elkaar, ook al staat er maar één op het scherm.
+* Responsive: getest op zowel mobiel (375px) als desktop-breedte.
+
+## Geldplanner.xlsx (Excel)
+
+### Gebruik
 
 ```bash
 pip install openpyxl
@@ -12,7 +32,7 @@ python generate_geldplanner.py            # schrijft Geldplanner.xlsx
 python generate_geldplanner.py Mijn.xlsx  # of een eigen bestandsnaam
 ```
 
-## Tabbladen
+### Tabbladen
 
 | Tabblad | Inhoud |
 | --- | --- |
@@ -29,7 +49,7 @@ invoer: alle cijfers, grafieken en KPI's daar zijn live formules die naar het bi
 "Overzicht"-tabblad verwijzen. De 12-maands staafdiagrammen zijn een prognose: ze trekken het
 huidige maandbudget vlak door over het jaar (er wordt geen aparte historie per maand bijgehouden).
 
-## Opmaak
+### Opmaak
 
 * **Gele cellen** zijn invoer en als enige ontgrendeld; alles daarbuiten is vergrendeld achter
   werkbladbeveiliging zonder wachtwoord (*Controleren → Blad-beveiliging opheffen* om formules
@@ -44,7 +64,7 @@ huidige maandbudget vlak door over het jaar (er wordt geen aparte historie per m
 * Bedragen gebruiken de opmaakcode `€ #,##0.00`, die op een Nederlandse Excel-installatie als
   `€ 1.234,56` wordt weergegeven.
 
-## Formules aanpassen
+### Formules aanpassen
 
 Alle bedragen worden als Excel-formule weggeschreven, niet als voorberekende waarde. In het
 script staan de rijnummers in variabelen (`overschot_rij`, `beschikbaar_rij`, …), zodat je regels

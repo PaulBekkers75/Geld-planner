@@ -1,0 +1,791 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Budget Buddy — grip op je geld</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%92%B6%3C/text%3E%3C/svg%3E">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    --hoofd: #1F3864;
+    --hoofd-licht: #2E5C8A;
+    --groen: #1E7145;
+    --groen-bg: #E5F3E8;
+    --rood: #C0392B;
+    --rood-bg: #FBE2E1;
+    --oranje: #B15C00;
+    --oranje-bg: #FDECD2;
+    --kaart-rand: #E1E5EE;
+    --tekst: #263042;
+    --tekst-zacht: #6B7688;
+    --achtergrond: #F3F5FA;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    background: var(--achtergrond);
+    color: var(--tekst);
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  header {
+    background: var(--hoofd);
+    color: #fff;
+    padding: 18px 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    box-shadow: 0 2px 10px rgba(0,0,0,.12);
+  }
+
+  .brand { display: flex; align-items: center; gap: 12px; }
+  .brand-icon { font-size: 2rem; line-height: 1; }
+  .brand h1 { margin: 0; font-size: 1.5rem; font-weight: 800; letter-spacing: -0.02em; }
+  .brand .tagline { margin: 2px 0 0; font-size: .85rem; color: #C9D5E8; font-weight: 500; }
+
+  .export-btn {
+    background: #fff;
+    color: var(--hoofd);
+    border: none;
+    border-radius: 10px;
+    padding: 10px 18px;
+    font-weight: 700;
+    font-size: .9rem;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    transition: transform .12s ease, box-shadow .12s ease;
+  }
+  .export-btn:hover { transform: translateY(-1px); box-shadow: 0 4px 10px rgba(0,0,0,.18); }
+
+  nav {
+    background: #fff;
+    border-bottom: 1px solid var(--kaart-rand);
+    position: sticky;
+    top: 74px;
+    z-index: 19;
+    display: flex;
+    gap: 4px;
+    padding: 0 16px;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .tab-btn {
+    background: none;
+    border: none;
+    padding: 16px 18px;
+    font-size: .95rem;
+    font-weight: 700;
+    color: var(--tekst-zacht);
+    cursor: pointer;
+    white-space: nowrap;
+    border-bottom: 3px solid transparent;
+    transition: color .15s ease, border-color .15s ease;
+  }
+  .tab-btn:hover { color: var(--hoofd); }
+  .tab-btn.active { color: var(--hoofd); border-bottom-color: var(--hoofd); }
+
+  main { max-width: 1120px; margin: 0 auto; padding: 24px 16px 60px; }
+
+  .tab-section { display: none; }
+  .tab-section.tab-active { display: block; animation: fade .18s ease; }
+  @keyframes fade { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+
+  .panel {
+    background: #fff;
+    border: 1px solid var(--kaart-rand);
+    border-radius: 16px;
+    padding: 22px 24px;
+    margin-bottom: 22px;
+    box-shadow: 0 1px 3px rgba(20,30,60,.05);
+  }
+
+  .panel h2 {
+    margin: 0 0 4px;
+    font-size: 1.15rem;
+    font-weight: 800;
+    color: var(--hoofd);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .panel h2::before {
+    content: "";
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--hoofd-licht);
+    flex: none;
+  }
+  .panel .sub { margin: 0 0 18px; color: var(--tekst-zacht); font-size: .9rem; }
+
+  /* KPI cards */
+  .kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+    gap: 16px;
+    margin-bottom: 26px;
+  }
+  .kpi-card {
+    background: #fff;
+    border-radius: 14px;
+    overflow: hidden;
+    box-shadow: 0 3px 12px rgba(20,30,60,.09);
+    border: 1px solid var(--kaart-rand);
+    display: flex;
+    flex-direction: column;
+  }
+  .kpi-head {
+    background: var(--hoofd);
+    color: #fff;
+    font-size: .72rem;
+    font-weight: 800;
+    letter-spacing: .05em;
+    text-transform: uppercase;
+    padding: 10px 16px;
+    text-align: center;
+  }
+  .kpi-value {
+    font-size: 2rem;
+    font-weight: 800;
+    color: var(--hoofd);
+    text-align: center;
+    padding: 18px 12px 6px;
+    letter-spacing: -0.01em;
+  }
+  .kpi-sub {
+    text-align: center;
+    font-size: .85rem;
+    font-weight: 700;
+    color: var(--tekst-zacht);
+    padding: 0 12px 18px;
+  }
+  .kpi-card:not(.has-sub) .kpi-value { padding-bottom: 20px; }
+
+  .kpi-card.status-pos .kpi-head { background: var(--groen); }
+  .kpi-card.status-pos .kpi-value { color: var(--groen); }
+  .kpi-card.status-pos .kpi-sub { color: var(--groen); }
+  .kpi-card.status-warn .kpi-head { background: var(--oranje); }
+  .kpi-card.status-warn .kpi-value { color: var(--oranje); }
+  .kpi-card.status-warn .kpi-sub { color: var(--oranje); }
+  .kpi-card.status-neg .kpi-head { background: var(--rood); }
+  .kpi-card.status-neg .kpi-value { color: var(--rood); }
+  .kpi-card.status-neg .kpi-sub { color: var(--rood); }
+
+  /* Forms */
+  .form-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+    gap: 16px 20px;
+  }
+  .field { display: flex; flex-direction: column; gap: 6px; }
+  .field label { font-size: .86rem; font-weight: 600; color: var(--tekst); }
+  .field .hint { font-size: .76rem; color: var(--tekst-zacht); margin-top: -2px; }
+  .input-euro {
+    position: relative;
+  }
+  .input-euro::before {
+    content: "€";
+    position: absolute;
+    left: 12px; top: 50%; transform: translateY(-50%);
+    color: var(--tekst-zacht);
+    font-weight: 700;
+    pointer-events: none;
+  }
+  .input-euro input[type="number"] {
+    padding-left: 30px;
+  }
+  input[type="number"] {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1.5px solid var(--kaart-rand);
+    border-radius: 9px;
+    font-size: 1rem;
+    font-family: inherit;
+    color: var(--tekst);
+    background: #FAFBFD;
+    transition: border-color .12s ease, box-shadow .12s ease;
+  }
+  input[type="number"]:focus {
+    outline: none;
+    border-color: var(--hoofd-licht);
+    box-shadow: 0 0 0 3px rgba(46,92,138,.15);
+    background: #fff;
+  }
+
+  .subtotal-row {
+    margin-top: 14px;
+    padding-top: 14px;
+    border-top: 1px dashed var(--kaart-rand);
+    display: flex;
+    justify-content: space-between;
+    font-weight: 700;
+    color: var(--hoofd);
+  }
+
+  /* Warning banner */
+  .warning-banner {
+    display: none;
+    align-items: center;
+    gap: 12px;
+    background: linear-gradient(135deg, #D9483A, var(--rood));
+    color: #fff;
+    padding: 16px 20px;
+    border-radius: 14px;
+    font-weight: 700;
+    margin-bottom: 22px;
+    box-shadow: 0 4px 14px rgba(192,57,43,.35);
+  }
+  .warning-banner.show { display: flex; }
+  .warning-banner .icon { font-size: 1.4rem; flex: none; }
+
+  /* Charts */
+  .chart-wrap { position: relative; height: 300px; }
+  .donut-row {
+    display: flex;
+    gap: 28px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  .donut-canvas-wrap { flex: 0 0 240px; height: 240px; position: relative; }
+  .legend-list { flex: 1 1 220px; display: flex; flex-direction: column; gap: 10px; min-width: 210px; }
+  .legend-item { display: flex; align-items: center; gap: 10px; font-size: .9rem; }
+  .legend-swatch { width: 13px; height: 13px; border-radius: 4px; flex: none; }
+  .legend-label { flex: 1; color: var(--tekst); font-weight: 600; }
+  .legend-value { font-weight: 700; color: var(--hoofd); white-space: nowrap; }
+  .legend-value small { color: var(--tekst-zacht); font-weight: 600; }
+
+  footer {
+    max-width: 1120px;
+    margin: 0 auto;
+    padding: 10px 16px 40px;
+    color: var(--tekst-zacht);
+    font-size: .82rem;
+    line-height: 1.5;
+  }
+  footer strong { color: var(--tekst); }
+
+  @media (max-width: 620px) {
+    header { padding: 14px 16px; }
+    .brand h1 { font-size: 1.25rem; }
+    nav { top: 66px; }
+    .kpi-value { font-size: 1.6rem; }
+    .donut-canvas-wrap { flex: 0 0 100%; margin: 0 auto; }
+  }
+
+  @media print {
+    .no-print { display: none !important; }
+    body { background: #fff; }
+    header { position: static; box-shadow: none; }
+    nav { display: none !important; }
+    main { max-width: 100%; padding: 0 12px; }
+    .tab-section { display: block !important; page-break-after: always; }
+    .tab-section:last-of-type { page-break-after: auto; }
+    .panel { box-shadow: none; border: 1px solid #ccc; break-inside: avoid; }
+    .kpi-card { box-shadow: none; border: 1px solid #ccc; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <span class="brand-icon" aria-hidden="true">💶</span>
+    <div>
+      <h1>Budget Buddy</h1>
+      <p class="tagline">Grip op je geld, simpel gemaakt</p>
+    </div>
+  </div>
+  <button class="export-btn no-print" onclick="window.print()">🖨️ Exporteer als PDF</button>
+</header>
+
+<nav class="no-print" id="tab-nav">
+  <button class="tab-btn" data-tab="cashflow-overzicht">Overzicht Cashflow</button>
+  <button class="tab-btn" data-tab="cashflow-statistieken">Statistieken Cashflow</button>
+  <button class="tab-btn" data-tab="budget-overzicht">Overzicht Budgetruimte</button>
+  <button class="tab-btn" data-tab="budget-statistieken">Statistieken Budgetruimte</button>
+</nav>
+
+<main>
+
+  <!-- ============ SECTIE 1: Overzicht Cashflow ============ -->
+  <section class="tab-section" id="cashflow-overzicht">
+    <div class="kpi-grid">
+      <div class="kpi-card" id="card-inkomsten">
+        <div class="kpi-head">Totale inkomsten</div>
+        <div class="kpi-value" id="kpi-inkomsten">€ 0</div>
+      </div>
+      <div class="kpi-card" id="card-uitgaven">
+        <div class="kpi-head">Totale uitgaven</div>
+        <div class="kpi-value" id="kpi-uitgaven">€ 0</div>
+      </div>
+      <div class="kpi-card" id="card-overschot">
+        <div class="kpi-head">Overschot / tekort</div>
+        <div class="kpi-value" id="kpi-overschot">€ 0</div>
+      </div>
+      <div class="kpi-card" id="card-spaarquote">
+        <div class="kpi-head">Spaarquote</div>
+        <div class="kpi-value" id="kpi-spaarquote">0%</div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Inkomsten per maand</h2>
+      <p class="sub">Vul in wat er netto binnenkomt.</p>
+      <div class="form-grid">
+        <div class="field">
+          <label for="inc-salaris1">Nettosalaris persoon 1</label>
+          <div class="input-euro"><input type="number" id="inc-salaris1" value="3600" min="0" step="10" inputmode="decimal"></div>
+        </div>
+        <div class="field">
+          <label for="inc-salaris2">Nettosalaris persoon 2</label>
+          <div class="input-euro"><input type="number" id="inc-salaris2" value="0" min="0" step="10" inputmode="decimal"></div>
+          <span class="hint">Laat op 0 staan als je alleenstaand bent</span>
+        </div>
+        <div class="field">
+          <label for="inc-freelance">Freelance-inkomsten (netto)</label>
+          <div class="input-euro"><input type="number" id="inc-freelance" value="0" min="0" step="10" inputmode="decimal"></div>
+        </div>
+        <div class="field">
+          <label for="inc-overig">Overige inkomsten</label>
+          <div class="input-euro"><input type="number" id="inc-overig" value="0" min="0" step="10" inputmode="decimal"></div>
+          <span class="hint">Toeslagen, huurinkomsten, alimentatie, ...</span>
+        </div>
+      </div>
+      <div class="subtotal-row"><span>Totaal inkomsten</span><span id="sub-inkomsten">€ 0</span></div>
+    </div>
+
+    <div class="panel">
+      <h2>Vaste lasten per maand</h2>
+      <div class="form-grid">
+        <div class="field">
+          <label for="exp-wonen">Wonen</label>
+          <div class="input-euro"><input type="number" id="exp-wonen" value="1450" min="0" step="10" inputmode="decimal"></div>
+          <span class="hint">Huur/hypotheek, energie, gemeentelijke belastingen</span>
+        </div>
+        <div class="field">
+          <label for="exp-verzekeringen">Verzekeringen</label>
+          <div class="input-euro"><input type="number" id="exp-verzekeringen" value="350" min="0" step="10" inputmode="decimal"></div>
+          <span class="hint">Zorgverzekering en overige verzekeringen</span>
+        </div>
+        <div class="field">
+          <label for="exp-abonnementen">Abonnementen</label>
+          <div class="input-euro"><input type="number" id="exp-abonnementen" value="115" min="0" step="5" inputmode="decimal"></div>
+          <span class="hint">Internet, tv, telefoon, streaming, lidmaatschappen</span>
+        </div>
+      </div>
+      <div class="subtotal-row"><span>Totaal vaste lasten</span><span id="sub-vast">€ 0</span></div>
+    </div>
+
+    <div class="panel">
+      <h2>Variabele kosten per maand</h2>
+      <div class="form-grid">
+        <div class="field">
+          <label for="exp-boodschappen">Boodschappen</label>
+          <div class="input-euro"><input type="number" id="exp-boodschappen" value="550" min="0" step="10" inputmode="decimal"></div>
+        </div>
+        <div class="field">
+          <label for="exp-vervoer">Vervoer</label>
+          <div class="input-euro"><input type="number" id="exp-vervoer" value="200" min="0" step="10" inputmode="decimal"></div>
+          <span class="hint">Brandstof, OV, onderhoud</span>
+        </div>
+        <div class="field">
+          <label for="exp-vrijetijd">Vrije tijd</label>
+          <div class="input-euro"><input type="number" id="exp-vrijetijd" value="200" min="0" step="10" inputmode="decimal"></div>
+          <span class="hint">Uitgaan, horeca, hobby's</span>
+        </div>
+        <div class="field">
+          <label for="exp-overig">Overig</label>
+          <div class="input-euro"><input type="number" id="exp-overig" value="225" min="0" step="10" inputmode="decimal"></div>
+          <span class="hint">Kleding, zorgkosten, vakantie, cadeaus</span>
+        </div>
+      </div>
+      <div class="subtotal-row"><span>Totaal variabele kosten</span><span id="sub-variabel">€ 0</span></div>
+    </div>
+
+    <div class="panel">
+      <h2>Vergelijking met vorige maand</h2>
+      <p class="sub">Dit bedrag wordt gebruikt op het tabblad "Statistieken Cashflow" om je vooruitgang te tonen.</p>
+      <div class="form-grid">
+        <div class="field">
+          <label for="prev-overschot">Overschot / tekort vorige maand</label>
+          <div class="input-euro"><input type="number" id="prev-overschot" value="450" step="10" inputmode="decimal"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ SECTIE 2: Statistieken Cashflow ============ -->
+  <section class="tab-section" id="cashflow-statistieken">
+    <p class="sub" style="margin: -6px 0 18px;">Deze pagina leest automatisch uit "Overzicht Cashflow" — er is hier geen eigen invoer.</p>
+
+    <div class="kpi-grid" style="grid-template-columns: minmax(240px, 360px);">
+      <div class="kpi-card has-sub" id="card-vs-vorige">
+        <div class="kpi-head">Overschot t.o.v. vorige maand</div>
+        <div class="kpi-value" id="kpi-vs-vorige">€ 0</div>
+        <div class="kpi-sub" id="kpi-vs-vorige-delta">—</div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Uitgaven per categorie</h2>
+      <div class="donut-row">
+        <div class="donut-canvas-wrap"><canvas id="chart-donut-cashflow"></canvas></div>
+        <div class="legend-list" id="legend-donut-cashflow"></div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Inkomsten vs. uitgaven per maand</h2>
+      <p class="sub">Prognose op basis van je huidige maandbudget, doorgetrokken over het jaar.</p>
+      <div class="chart-wrap"><canvas id="chart-bar-cashflow"></canvas></div>
+    </div>
+  </section>
+
+  <!-- ============ SECTIE 3: Overzicht Budgetruimte ============ -->
+  <section class="tab-section" id="budget-overzicht">
+    <div class="warning-banner" id="budget-warning">
+      <span class="icon">⚠️</span>
+      <span>Let op: je gewenste spaar- en investeerbedrag samen zijn hoger dan je beschikbare overschot deze maand.</span>
+    </div>
+
+    <div class="kpi-grid">
+      <div class="kpi-card" id="card-beschikbaar">
+        <div class="kpi-head">Beschikbare budgetruimte</div>
+        <div class="kpi-value" id="kpi-beschikbaar">€ 0</div>
+      </div>
+      <div class="kpi-card" id="card-vrijbesteedbaar">
+        <div class="kpi-head">Vrij besteedbaar</div>
+        <div class="kpi-value" id="kpi-vrijbesteedbaar">€ 0</div>
+        <div class="kpi-sub">Na sparen en investeren</div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Jouw spaar- en investeringsdoel</h2>
+      <p class="sub">Gebaseerd op je overschot uit "Overzicht Cashflow".</p>
+      <div class="form-grid">
+        <div class="field">
+          <label for="bud-sparen">Gewenst spaarbedrag per maand</label>
+          <div class="input-euro"><input type="number" id="bud-sparen" value="200" min="0" step="10" inputmode="decimal"></div>
+        </div>
+        <div class="field">
+          <label for="bud-investeren">Gewenst investeerbedrag per maand</label>
+          <div class="input-euro"><input type="number" id="bud-investeren" value="150" min="0" step="10" inputmode="decimal"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ SECTIE 4: Statistieken Budgetruimte ============ -->
+  <section class="tab-section" id="budget-statistieken">
+    <p class="sub" style="margin: -6px 0 18px;">Deze pagina leest automatisch uit "Overzicht Budgetruimte" — er is hier geen eigen invoer.</p>
+
+    <div class="kpi-grid" style="grid-template-columns: minmax(240px, 360px);">
+      <div class="kpi-card" id="card-totaal-jaar">
+        <div class="kpi-head">Totaal gespaard + geïnvesteerd (12 mnd)</div>
+        <div class="kpi-value" id="kpi-totaal-jaar">€ 0</div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Verdeling van je budgetruimte</h2>
+      <div class="donut-row">
+        <div class="donut-canvas-wrap"><canvas id="chart-donut-budget"></canvas></div>
+        <div class="legend-list" id="legend-donut-budget"></div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Budgetruimte per maand</h2>
+      <p class="sub">Prognose op basis van je huidige instellingen, doorgetrokken over het jaar.</p>
+      <div class="chart-wrap"><canvas id="chart-bar-budget"></canvas></div>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  <strong>Budget Buddy</strong> is uitsluitend bedoeld voor informatieve doeleinden en biedt geen financieel advies.
+  Al je gegevens blijven lokaal in je browser — er wordt niets verstuurd of opgeslagen op een server.
+  Sluit je deze pagina, dan ben je je invoer kwijt, tenzij je hem eerst exporteert als PDF.
+</footer>
+
+<script>
+(function () {
+  "use strict";
+
+  const fmtEUR = new Intl.NumberFormat('nl-NL', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 });
+  const fmtEURSigned = (n) => (n < 0 ? '-' : '') + fmtEUR.format(Math.abs(n));
+  const fmtPct = new Intl.NumberFormat('nl-NL', { style: 'percent', minimumFractionDigits: 1, maximumFractionDigits: 1 });
+
+  const MAANDEN = ['Jan', 'Feb', 'Mrt', 'Apr', 'Mei', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dec'];
+  const PALET = ['#1F3864', '#2E5C8A', '#4F81BD', '#8DB4E2', '#BF8F00', '#D9A441', '#6B7A99'];
+  const GROEN = '#2E7D46';
+  const ROOD = '#C0392B';
+
+  function getNum(id) {
+    const v = parseFloat(document.getElementById(id).value);
+    return isNaN(v) ? 0 : v;
+  }
+
+  function setText(id, text) {
+    document.getElementById(id).textContent = text;
+  }
+
+  function setStatus(cardId, level) {
+    const el = document.getElementById(cardId);
+    el.classList.remove('status-pos', 'status-warn', 'status-neg');
+    if (level) el.classList.add('status-' + level);
+  }
+
+  // ---------------------------------------------------------------------
+  // Grafieken
+  // ---------------------------------------------------------------------
+  let charts = {};
+
+  function initCharts() {
+    // Deze app werkt live: elke toetsaanslag herberekent en herschildert direct.
+    // Animaties uitzetten voorkomt vertraagd/half opgebouwd ogende grafieken.
+    Chart.defaults.animation = false;
+
+    const donutOpts = {
+      responsive: true,
+      maintainAspectRatio: false,
+      cutout: '62%',
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: (ctx) => `${ctx.label}: ${fmtEUR.format(ctx.parsed)}` } },
+      },
+    };
+
+    charts.donutCashflow = new Chart(document.getElementById('chart-donut-cashflow'), {
+      type: 'doughnut',
+      data: { labels: [], datasets: [{ data: [], backgroundColor: PALET, borderWidth: 2, borderColor: '#fff' }] },
+      options: donutOpts,
+    });
+
+    charts.donutBudget = new Chart(document.getElementById('chart-donut-budget'), {
+      type: 'doughnut',
+      data: { labels: [], datasets: [{ data: [], backgroundColor: PALET, borderWidth: 2, borderColor: '#fff' }] },
+      options: donutOpts,
+    });
+
+    charts.barCashflow = new Chart(document.getElementById('chart-bar-cashflow'), {
+      type: 'bar',
+      data: {
+        labels: MAANDEN,
+        datasets: [
+          { label: 'Inkomsten', data: Array(12).fill(0), backgroundColor: GROEN, borderRadius: 4, maxBarThickness: 34 },
+          { label: 'Uitgaven', data: Array(12).fill(0), backgroundColor: ROOD, borderRadius: 4, maxBarThickness: 34 },
+        ],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { position: 'top', labels: { usePointStyle: true, boxWidth: 8 } },
+          tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: ${fmtEUR.format(ctx.parsed.y)}` } },
+        },
+        scales: {
+          y: { beginAtZero: true, ticks: { callback: (v) => fmtEUR.format(v) } },
+        },
+      },
+    });
+
+    charts.barBudget = new Chart(document.getElementById('chart-bar-budget'), {
+      type: 'bar',
+      data: {
+        labels: MAANDEN,
+        datasets: [
+          { label: 'Sparen', data: Array(12).fill(0), backgroundColor: PALET[0], borderRadius: 4, maxBarThickness: 34 },
+          { label: 'Investeren', data: Array(12).fill(0), backgroundColor: PALET[4], borderRadius: 4, maxBarThickness: 34 },
+          { label: 'Vrij besteedbaar', data: Array(12).fill(0), backgroundColor: PALET[6], borderRadius: 4, maxBarThickness: 34 },
+        ],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { position: 'top', labels: { usePointStyle: true, boxWidth: 8 } },
+          tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: ${fmtEUR.format(ctx.parsed.y)}` } },
+        },
+        scales: {
+          x: { stacked: true },
+          y: { stacked: true, beginAtZero: true, ticks: { callback: (v) => fmtEUR.format(v) } },
+        },
+      },
+    });
+  }
+
+  function updateDonut(chart, items) {
+    chart.data.labels = items.map((i) => i.label);
+    chart.data.datasets[0].data = items.map((i) => Math.max(0, i.value));
+    chart.update();
+  }
+
+  function renderLegend(containerId, items) {
+    const total = items.reduce((s, i) => s + Math.max(0, i.value), 0);
+    const el = document.getElementById(containerId);
+    el.innerHTML = items.map((item, i) => {
+      const val = Math.max(0, item.value);
+      const pct = total > 0 ? Math.round((val / total) * 100) : 0;
+      const kleur = PALET[i % PALET.length];
+      return `<div class="legend-item">
+        <span class="legend-swatch" style="background:${kleur}"></span>
+        <span class="legend-label">${item.label}</span>
+        <span class="legend-value">${fmtEUR.format(val)} <small>(${pct}%)</small></span>
+      </div>`;
+    }).join('');
+  }
+
+  function updateFlatBar(chart, values) {
+    values.forEach((v, i) => {
+      chart.data.datasets[i].data = Array(12).fill(Math.max(0, v));
+    });
+    chart.update();
+  }
+
+  // ---------------------------------------------------------------------
+  // Herberekening — draait live bij elke invoerwijziging
+  // ---------------------------------------------------------------------
+  function recalc() {
+    // --- Sectie 1: Cashflow ---
+    const salaris1 = getNum('inc-salaris1');
+    const salaris2 = getNum('inc-salaris2');
+    const freelance = getNum('inc-freelance');
+    const overigInkomen = getNum('inc-overig');
+    const inkomsten = salaris1 + salaris2 + freelance + overigInkomen;
+
+    const wonen = getNum('exp-wonen');
+    const verzekeringen = getNum('exp-verzekeringen');
+    const abonnementen = getNum('exp-abonnementen');
+    const vast = wonen + verzekeringen + abonnementen;
+
+    const boodschappen = getNum('exp-boodschappen');
+    const vervoer = getNum('exp-vervoer');
+    const vrijeTijd = getNum('exp-vrijetijd');
+    const overigUitgaven = getNum('exp-overig');
+    const variabel = boodschappen + vervoer + vrijeTijd + overigUitgaven;
+
+    const uitgaven = vast + variabel;
+    const overschot = inkomsten - uitgaven;
+    const spaarquote = inkomsten > 0 ? overschot / inkomsten : null;
+
+    setText('sub-inkomsten', fmtEUR.format(inkomsten));
+    setText('sub-vast', fmtEUR.format(vast));
+    setText('sub-variabel', fmtEUR.format(variabel));
+
+    setText('kpi-inkomsten', fmtEUR.format(inkomsten));
+    setText('kpi-uitgaven', fmtEUR.format(uitgaven));
+    setText('kpi-overschot', fmtEURSigned(overschot));
+    setText('kpi-spaarquote', spaarquote === null ? '—' : fmtPct.format(spaarquote));
+
+    setStatus('card-overschot', overschot >= 0 ? 'pos' : 'neg');
+    if (spaarquote === null) setStatus('card-spaarquote', null);
+    else if (spaarquote >= 0.10) setStatus('card-spaarquote', 'pos');
+    else if (spaarquote >= 0) setStatus('card-spaarquote', 'warn');
+    else setStatus('card-spaarquote', 'neg');
+
+    const categorieen = [
+      { label: 'Wonen', value: wonen },
+      { label: 'Verzekeringen', value: verzekeringen },
+      { label: 'Abonnementen', value: abonnementen },
+      { label: 'Boodschappen', value: boodschappen },
+      { label: 'Vervoer', value: vervoer },
+      { label: 'Vrije tijd', value: vrijeTijd },
+      { label: 'Overig', value: overigUitgaven },
+    ];
+    updateDonut(charts.donutCashflow, categorieen);
+    renderLegend('legend-donut-cashflow', categorieen);
+    updateFlatBar(charts.barCashflow, [inkomsten, uitgaven]);
+
+    // --- Sectie 2: vergelijking met vorige maand ---
+    const vorigeOverschot = getNum('prev-overschot');
+    const delta = overschot - vorigeOverschot;
+    setText('kpi-vs-vorige', fmtEURSigned(overschot));
+    let deltaTekst;
+    if (vorigeOverschot === 0) {
+      deltaTekst = 'Geen vergelijking beschikbaar';
+    } else {
+      const deltaPct = delta / Math.abs(vorigeOverschot);
+      const pijl = delta >= 0 ? '▲' : '▼';
+      const teken = delta >= 0 ? '+' : '-';
+      deltaTekst = `${pijl} ${teken}${fmtEUR.format(Math.abs(delta))}  (${fmtPct.format(Math.abs(deltaPct))})`;
+    }
+    setText('kpi-vs-vorige-delta', deltaTekst);
+    setStatus('card-vs-vorige', delta >= 0 ? 'pos' : 'neg');
+
+    // --- Sectie 3: Budgetruimte ---
+    const sparen = getNum('bud-sparen');
+    const investeren = getNum('bud-investeren');
+    const gewenstTotaal = sparen + investeren;
+    const vrijBesteedbaar = overschot - gewenstTotaal;
+
+    setText('kpi-beschikbaar', fmtEURSigned(overschot));
+    setText('kpi-vrijbesteedbaar', fmtEURSigned(vrijBesteedbaar));
+    setStatus('card-beschikbaar', overschot >= 0 ? 'pos' : 'neg');
+    setStatus('card-vrijbesteedbaar', vrijBesteedbaar >= 0 ? 'pos' : 'neg');
+
+    document.getElementById('budget-warning').classList.toggle('show', gewenstTotaal > overschot);
+
+    // --- Sectie 4: statistieken budgetruimte ---
+    const vrijVoorGrafiek = Math.max(0, vrijBesteedbaar);
+    const verdeling = [
+      { label: 'Sparen', value: sparen },
+      { label: 'Investeren', value: investeren },
+      { label: 'Vrij besteedbaar', value: vrijVoorGrafiek },
+    ];
+    updateDonut(charts.donutBudget, verdeling);
+    renderLegend('legend-donut-budget', verdeling);
+    updateFlatBar(charts.barBudget, [sparen, investeren, vrijVoorGrafiek]);
+
+    setText('kpi-totaal-jaar', fmtEUR.format((sparen + investeren) * 12));
+  }
+
+  // ---------------------------------------------------------------------
+  // Tabnavigatie
+  // ---------------------------------------------------------------------
+  function showTab(id) {
+    document.querySelectorAll('.tab-section').forEach((s) => s.classList.toggle('tab-active', s.id === id));
+    document.querySelectorAll('.tab-btn').forEach((b) => b.classList.toggle('active', b.dataset.tab === id));
+    requestAnimationFrame(() => {
+      Object.values(charts).forEach((c) => c && c.resize());
+    });
+  }
+
+  document.getElementById('tab-nav').addEventListener('click', (e) => {
+    const btn = e.target.closest('.tab-btn');
+    if (btn) showTab(btn.dataset.tab);
+  });
+
+  window.addEventListener('beforeprint', () => {
+    Object.values(charts).forEach((c) => c && c.resize());
+  });
+
+  // ---------------------------------------------------------------------
+  // Init
+  // ---------------------------------------------------------------------
+  document.addEventListener('DOMContentLoaded', () => {
+    initCharts();
+    showTab('cashflow-overzicht');
+    recalc();
+
+    document.querySelectorAll('input[type="number"]').forEach((input) => {
+      input.addEventListener('input', recalc);
+    });
+  });
+})();
+</script>
+</body>
+</html>
