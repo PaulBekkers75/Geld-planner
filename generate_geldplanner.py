@@ -2,21 +2,25 @@
 # -*- coding: utf-8 -*-
 """
 Geldplanner NL — generator voor een Excel-sjabloon (.xlsx) voor persoonlijke
-financien, gericht op Nederlandse particulieren, stellen en zzp'ers.
+financien, gericht op Nederlandse particulieren en stellen.
 
 Gebruik:
     pip install openpyxl
     python generate_geldplanner.py [uitvoerbestand.xlsx]
 
-Het script bouwt een werkmap met vijf tabbladen:
-    1. Instructies
-    2. Cashflow Overzicht
-    3. ZZP Belastingtool
-    4. Pensioengat Calculator
-    5. Vermogensgroei
+Het script bouwt een werkmap met zes tabbladen:
+    1. Titelblad
+    2. Dashboard
+    3. Instructies
+    4. Cashflow Overzicht
+    5. Pensioengat Calculator
+    6. Vermogensgroei
 
 Alle bedragen worden als Excel-formules weggeschreven (geen voorberekende
-waarden), zodat de formules in Excel zelf zichtbaar en aanpasbaar zijn.
+waarden), zodat de formules in Excel zelf zichtbaar en aanpasbaar zijn. Het
+Dashboard en de koppeling tussen Cashflow, Pensioengat en Vermogensgroei
+verwijzen naar cellen op andere tabbladen, dus die werken automatisch bij
+zodra de gebruiker de brontabbladen invult.
 
 DISCLAIMER: uitsluitend informatief, geen financieel advies.
 """
@@ -28,8 +32,9 @@ from openpyxl.chart import BarChart, LineChart, Reference
 from openpyxl.chart.label import DataLabelList
 from openpyxl.formatting.rule import CellIsRule, FormulaRule
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Protection, Side
-from openpyxl.worksheet.properties import PageSetupProperties
+from openpyxl.utils import column_index_from_string, get_column_letter
 from openpyxl.worksheet.datavalidation import DataValidation
+from openpyxl.worksheet.properties import PageSetupProperties
 
 # ---------------------------------------------------------------------------
 # Huisstijl / opmaak
@@ -37,43 +42,67 @@ from openpyxl.worksheet.datavalidation import DataValidation
 
 FONT_NAME = "Calibri"
 
-CLR_DONKERBLAUW = "1F3864"
+# Hoofdkleur (donkerblauw) + accentkleur (goud), consistent op elk tabblad.
+CLR_DONKERBLAUW = "132A46"
 CLR_BLAUW = "2E5C8A"
 CLR_LICHTBLAUW = "D9E2F3"
+CLR_ACCENT = "C9A227"
+CLR_ACCENT_DONKER = "8C6D0F"
+CLR_ACCENT_LICHT = "F7EFD9"
+CLR_KAART_BG = "F3F5FA"
+CLR_KAART_RAND = "C9D2E3"
 CLR_GEEL = "FFF2CC"
 CLR_GEEL_RAND = "BF8F00"
 CLR_GRIJS = "EDEDED"
 CLR_GRIJS_RAND = "BFBFBF"
-CLR_GROEN = "E2EFDA"
-CLR_ROOD = "FCE4E4"
+CLR_GROEN_BG = "E5F3E8"
+CLR_GROEN_TEKST = "1E7145"
+CLR_GROEN_RAND = "7FC49A"
+CLR_ORANJE_BG = "FDECD2"
+CLR_ORANJE_TEKST = "B15C00"
+CLR_ORANJE_RAND = "F0B462"
+CLR_ROOD_BG = "FCE4E4"
+CLR_ROOD_TEKST = "9C0006"
+CLR_ROOD_RAND = "E39494"
 CLR_WIT = "FFFFFF"
 
 F_TITEL = Font(name=FONT_NAME, size=18, bold=True, color=CLR_WIT)
 F_SUBTITEL = Font(name=FONT_NAME, size=10, italic=True, color=CLR_WIT)
 F_SECTIE = Font(name=FONT_NAME, size=11, bold=True, color=CLR_WIT)
+F_SECTIE_ACCENT = Font(name=FONT_NAME, size=11, bold=True, color=CLR_DONKERBLAUW)
 F_KOP = Font(name=FONT_NAME, size=11, bold=True, color=CLR_DONKERBLAUW)
 F_LABEL = Font(name=FONT_NAME, size=11)
 F_LABEL_VET = Font(name=FONT_NAME, size=11, bold=True)
 F_NOTITIE = Font(name=FONT_NAME, size=9, italic=True, color="7F7F7F")
 F_RESULTAAT = Font(name=FONT_NAME, size=12, bold=True, color=CLR_DONKERBLAUW)
+F_RESULTAAT_LABEL = Font(name=FONT_NAME, size=13, bold=True, color=CLR_DONKERBLAUW)
+F_KPI_GROOT = Font(name=FONT_NAME, size=20, bold=True, color=CLR_DONKERBLAUW)
+F_KPI_MEGA = Font(name=FONT_NAME, size=26, bold=True, color=CLR_DONKERBLAUW)
+F_BADGE = Font(name=FONT_NAME, size=11, bold=True, color=CLR_DONKERBLAUW)
 F_TEKST = Font(name=FONT_NAME, size=11)
 F_TEKST_VET = Font(name=FONT_NAME, size=11, bold=True, color=CLR_DONKERBLAUW)
 
 FILL_TITEL = PatternFill("solid", fgColor=CLR_DONKERBLAUW)
 FILL_SECTIE = PatternFill("solid", fgColor=CLR_BLAUW)
+FILL_SECTIE_ACCENT = PatternFill("solid", fgColor=CLR_ACCENT)
 FILL_INVOER = PatternFill("solid", fgColor=CLR_GEEL)
 FILL_BEREKEND = PatternFill("solid", fgColor=CLR_GRIJS)
 FILL_RESULTAAT = PatternFill("solid", fgColor=CLR_LICHTBLAUW)
-FILL_GROEN = PatternFill("solid", fgColor=CLR_GROEN)
-FILL_ROOD = PatternFill("solid", fgColor=CLR_ROOD)
+FILL_KPI = PatternFill("solid", fgColor=CLR_ACCENT_LICHT)
+FILL_KAART = PatternFill("solid", fgColor=CLR_KAART_BG)
+FILL_GROEN = PatternFill("solid", fgColor=CLR_GROEN_BG)
+FILL_ORANJE = PatternFill("solid", fgColor=CLR_ORANJE_BG)
+FILL_ROOD = PatternFill("solid", fgColor=CLR_ROOD_BG)
 
 _dun_geel = Side(style="thin", color=CLR_GEEL_RAND)
 _dun_grijs = Side(style="thin", color=CLR_GRIJS_RAND)
 _dun_blauw = Side(style="thin", color=CLR_BLAUW)
+_dun_accent = Side(style="thin", color=CLR_ACCENT_DONKER)
 
 RAND_INVOER = Border(left=_dun_geel, right=_dun_geel, top=_dun_geel, bottom=_dun_geel)
 RAND_BEREKEND = Border(left=_dun_grijs, right=_dun_grijs, top=_dun_grijs, bottom=_dun_grijs)
 RAND_RESULTAAT = Border(left=_dun_blauw, right=_dun_blauw, top=_dun_blauw, bottom=_dun_blauw)
+RAND_ACCENT = Border(left=_dun_accent, right=_dun_accent, top=_dun_accent, bottom=_dun_accent)
 
 # Getalnotaties. openpyxl schrijft opmaakcodes in en-US-conventie weg; Excel
 # toont ze in de landinstelling van de gebruiker, dus op een Nederlandse
@@ -89,6 +118,9 @@ FMT_JAAR = '0 "jaar"'
 # vergrendeld zodat werkbladbeveiliging de berekeningen beschermt.
 BESCHERMD = Protection(locked=True)
 ONBESCHERMD = Protection(locked=False)
+
+DISCLAIMER = ("Deze tool is uitsluitend bedoeld voor informatieve doeleinden "
+              "en biedt geen financieel advies")
 
 
 # ---------------------------------------------------------------------------
@@ -120,14 +152,16 @@ def titelblok(ws, titel, ondertitel, laatste_kolom="F"):
     return 5
 
 
-def sectiebalk(ws, rij, tekst="", laatste_kolom="D"):
+def sectiebalk(ws, rij, tekst="", laatste_kolom="D", accent=False):
+    """Gekleurde sectiekop. accent=True gebruikt de goudkleur (koppel-secties)."""
     ws.merge_cells(f"B{rij}:{laatste_kolom}{rij}")
     cel = ws.cell(row=rij, column=2)
-    cel.value = tekst
-    cel.font = F_SECTIE
+    cel.value = f"◆  {tekst}"
+    cel.font = F_SECTIE_ACCENT if accent else F_SECTIE
     cel.alignment = Alignment(horizontal="left", vertical="center", indent=1)
+    vulling = FILL_SECTIE_ACCENT if accent else FILL_SECTIE
     for kol in range(2, ws[f"{laatste_kolom}1"].column + 1):
-        ws.cell(row=rij, column=kol).fill = FILL_SECTIE
+        ws.cell(row=rij, column=kol).fill = vulling
     ws.row_dimensions[rij].height = 20
     return rij + 1
 
@@ -150,31 +184,41 @@ def invoerregel(ws, rij, label, standaardwaarde, notatie=FMT_EURO, notitie="",
     if notitie:
         nt = ws.cell(row=rij, column=notitie_kolom, value=notitie)
         nt.font = F_NOTITIE
-        nt.alignment = Alignment(vertical="center", indent=1)
+        nt.alignment = Alignment(vertical="center", indent=1, wrap_text=True)
     ws.row_dimensions[rij].height = 17
     return rij + 1
 
 
 def berekendregel(ws, rij, label, formule, notatie=FMT_EURO, notitie="",
-                  accent=False, label_kolom=2, waarde_kolom=3, notitie_kolom=4):
-    """Een grijze, vergrendelde uitvoercel met formule."""
+                  accent=False, groot=False, label_kolom=2, waarde_kolom=3, notitie_kolom=4):
+    """Een grijze, vergrendelde uitvoercel met formule.
+
+    accent=True markeert een sectie-eindresultaat (lichtblauw).
+    groot=True markeert de belangrijkste uitkomst van het hele tabblad: groot,
+    vet en met een goudkleurige kaart eromheen.
+    """
     lbl = ws.cell(row=rij, column=label_kolom, value=label)
-    lbl.font = F_RESULTAAT if accent else F_LABEL_VET
-    lbl.alignment = Alignment(vertical="center", indent=1)
+    lbl.font = F_RESULTAAT_LABEL if groot else (F_RESULTAAT if accent else F_LABEL_VET)
+    lbl.alignment = Alignment(vertical="center", indent=1, wrap_text=True)
 
     cel = ws.cell(row=rij, column=waarde_kolom, value=formule)
-    cel.fill = FILL_RESULTAAT if accent else FILL_BEREKEND
-    cel.border = RAND_RESULTAAT if accent else RAND_BEREKEND
+    if groot:
+        cel.fill = FILL_KPI
+        cel.border = RAND_ACCENT
+        cel.font = F_KPI_GROOT
+    else:
+        cel.fill = FILL_RESULTAAT if accent else FILL_BEREKEND
+        cel.border = RAND_RESULTAAT if accent else RAND_BEREKEND
+        cel.font = F_RESULTAAT if accent else F_LABEL_VET
     cel.number_format = notatie
-    cel.font = F_RESULTAAT if accent else F_LABEL_VET
     cel.protection = BESCHERMD
     cel.alignment = Alignment(horizontal="right", vertical="center", indent=1)
 
     if notitie:
         nt = ws.cell(row=rij, column=notitie_kolom, value=notitie)
         nt.font = F_NOTITIE
-        nt.alignment = Alignment(vertical="center", indent=1)
-    ws.row_dimensions[rij].height = 20 if accent else 17
+        nt.alignment = Alignment(vertical="center", indent=1, wrap_text=True)
+    ws.row_dimensions[rij].height = 34 if groot else (20 if accent else 17)
     return rij + 1
 
 
@@ -184,6 +228,57 @@ def notitieregel(ws, rij, tekst="", laatste_kolom="D", vet=False):
     cel.font = F_TEKST_VET if vet else F_NOTITIE
     cel.alignment = Alignment(vertical="center", indent=1, wrap_text=False)
     return rij + 1
+
+
+def kader_vulling(ws, top, bottom, kolommen, fill):
+    """Zet een lichte achtergrondkleur op specifieke kolommen (bijv. label en
+    toelichting), zonder de vulling van invoer-/uitvoercellen te overschrijven."""
+    for rij in range(top, bottom + 1):
+        for kol in kolommen:
+            ws[f"{kol}{rij}"].fill = fill
+
+
+def kader_rand(ws, top, bottom, kol_links, kol_rechts, kleur, dikte="thin"):
+    """Tekent een dunne rand rond een rechthoekig blok cellen — een 'kaart'
+    om een samenhangende sectie heen, zonder bestaande randen te wissen."""
+    zijde = Side(style=dikte, color=kleur)
+    links_idx = column_index_from_string(kol_links)
+    rechts_idx = column_index_from_string(kol_rechts)
+    for rij in range(top, bottom + 1):
+        for kol in range(links_idx, rechts_idx + 1):
+            boven = zijde if rij == top else None
+            onder = zijde if rij == bottom else None
+            links = zijde if kol == links_idx else None
+            rechts = zijde if kol == rechts_idx else None
+            if not (boven or onder or links or rechts):
+                continue
+            cel = ws.cell(row=rij, column=kol)
+            bestaand = cel.border
+            cel.border = Border(
+                top=boven or bestaand.top,
+                bottom=onder or bestaand.bottom,
+                left=links or bestaand.left,
+                right=rechts or bestaand.right,
+            )
+
+
+def sectie_kaart(ws, top, bottom, laatste_kolom="D"):
+    """Combineert kader_vulling + kader_rand tot de standaard 'kaart'-stijl die
+    onder elke sectiebalk wordt gebruikt: lichte achtergrond + subtiele rand."""
+    kolommen = [get_column_letter(k) for k in range(2, column_index_from_string(laatste_kolom) + 1)]
+    randkolommen = [k for k in kolommen if k not in ("C",)]
+    kader_vulling(ws, top, bottom, randkolommen, FILL_KAART)
+    kader_rand(ws, top, bottom, "B", laatste_kolom, CLR_KAART_RAND)
+
+
+def ja_nee_validatie(ws, rijen, kolom=3):
+    dv = DataValidation(type="list", formula1='"Ja,Nee"', allow_blank=False, showDropDown=False)
+    dv.error = "Kies Ja of Nee."
+    dv.errorTitle = "Ongeldige invoer"
+    ws.add_data_validation(dv)
+    for rij in rijen:
+        dv.add(ws.cell(row=rij, column=kolom))
+    return dv
 
 
 def beveilig(ws):
@@ -205,26 +300,264 @@ def blad_basis(ws, tabkleur=CLR_DONKERBLAUW):
     ws.page_setup.fitToHeight = 0
 
 
-DISCLAIMER = ("Deze tool is uitsluitend bedoeld voor informatieve doeleinden "
-              "en biedt geen financieel advies")
+# ---------------------------------------------------------------------------
+# TABBLAD 1 — Titelblad
+# ---------------------------------------------------------------------------
+
+def bouw_titelblad(wb):
+    ws = wb.create_sheet("Titelblad")
+    blad_basis(ws, CLR_DONKERBLAUW)
+    zet_kolombreedtes(ws, {"A": 3, "B": 8, "C": 16, "D": 16, "E": 16, "F": 16, "G": 8, "H": 3})
+
+    for rij in range(1, 3):
+        for kol in range(1, 9):
+            ws.cell(row=rij, column=kol).fill = FILL_TITEL
+    ws.row_dimensions[1].height = 8
+    ws.row_dimensions[2].height = 8
+
+    # --- Logo-plek ---
+    ws.merge_cells("C4:F11")
+    logo = ws["C4"]
+    logo.value = "[ Plaats hier je logo ]"
+    logo.font = Font(name=FONT_NAME, size=11, italic=True, color="9AA5B1")
+    logo.fill = PatternFill("solid", fgColor="F5F6F8")
+    logo.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    stip = Side(style="dashed", color="B7C0CC")
+    for rij in range(4, 12):
+        for kol in range(3, 7):
+            cel = ws.cell(row=rij, column=kol)
+            cel.fill = PatternFill("solid", fgColor="F5F6F8")
+            cel.border = Border(
+                top=stip if rij == 4 else None,
+                bottom=stip if rij == 11 else None,
+                left=stip if kol == 3 else None,
+                right=stip if kol == 6 else None,
+            )
+        ws.row_dimensions[rij].height = 18
+
+    r = 13
+    ws.merge_cells(f"B{r}:G{r}")
+    titel = ws.cell(row=r, column=2, value="GELDPLANNER")
+    titel.font = Font(name=FONT_NAME, size=40, bold=True, color=CLR_DONKERBLAUW)
+    titel.alignment = Alignment(horizontal="center", vertical="center")
+    ws.row_dimensions[r].height = 56
+    r += 1
+
+    ws.merge_cells(f"B{r}:G{r}")
+    tagline = ws.cell(row=r, column=2,
+                      value="Grip op je geld — cashflow, pensioen en vermogensopbouw in één overzicht")
+    tagline.font = Font(name=FONT_NAME, size=13, italic=True, color=CLR_ACCENT_DONKER)
+    tagline.alignment = Alignment(horizontal="center", vertical="center")
+    ws.row_dimensions[r].height = 22
+    r += 2
+
+    ws.merge_cells(f"C{r}:F{r}")
+    for kol in range(3, 7):
+        ws.cell(row=r, column=kol).fill = PatternFill("solid", fgColor=CLR_ACCENT)
+    ws.row_dimensions[r].height = 4
+    r += 2
+
+    ws.merge_cells(f"B{r}:G{r + 3}")
+    intro = ws.cell(row=r, column=2)
+    intro.value = (
+        "Welkom bij Geldplanner. Deze werkmap geeft je in een paar minuten overzicht over je "
+        "maandelijkse cashflow, je pensioengat en de groei van je vermogen — met heldere, "
+        "aanpasbare formules in plaats van een kant-en-klaar zwart doosje.\n\n"
+        "Vul de gele cellen op de tabbladen in; het Dashboard werkt automatisch bij."
+    )
+    intro.font = Font(name=FONT_NAME, size=11, color="404040")
+    intro.alignment = Alignment(horizontal="center", vertical="top", wrap_text=True)
+    for rij in range(r, r + 4):
+        ws.row_dimensions[rij].height = 20
+    r += 5
+
+    ws.merge_cells(f"B{r}:G{r}")
+    kop = ws.cell(row=r, column=2, value="WAT ZIT ERIN?")
+    kop.font = Font(name=FONT_NAME, size=11, bold=True, color=CLR_ACCENT_DONKER)
+    kop.alignment = Alignment(horizontal="center", vertical="center")
+    r += 1
+
+    onderdelen = [
+        "◆  Dashboard — je financiële situatie in één oogopslag",
+        "◆  Cashflow Overzicht — inkomsten, lasten en je maandelijkse overschot",
+        "◆  Pensioengat Calculator — wat je AOW en pensioen missen, en wat je daarvoor opzij zet",
+        "◆  Vermogensgroei — de projectie van je spaargeld en beleggingen",
+    ]
+    for tekst in onderdelen:
+        ws.merge_cells(f"C{r}:F{r}")
+        cel = ws.cell(row=r, column=3, value=tekst)
+        cel.font = Font(name=FONT_NAME, size=11, color="404040")
+        cel.alignment = Alignment(horizontal="left", vertical="center", indent=1)
+        ws.row_dimensions[r].height = 19
+        r += 1
+    r += 1
+
+    ws.merge_cells(f"B{r}:G{r}")
+    cta = ws.cell(row=r, column=2, value="→  Ga naar het tabblad 'Dashboard' om te beginnen")
+    cta.font = Font(name=FONT_NAME, size=12, bold=True, color=CLR_DONKERBLAUW)
+    cta.fill = PatternFill("solid", fgColor=CLR_ACCENT_LICHT)
+    cta.alignment = Alignment(horizontal="center", vertical="center")
+    kader_rand(ws, r, r, "B", "G", CLR_ACCENT, dikte="medium")
+    ws.row_dimensions[r].height = 26
+    r += 2
+
+    ws.merge_cells(f"B{r}:G{r}")
+    footer = ws.cell(row=r, column=2,
+                     value=f"Geldplanner · Versie 1.0  ·  {DISCLAIMER}. Zie het tabblad 'Instructies' voor de volledige toelichting.")
+    footer.font = F_NOTITIE
+    footer.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    ws.row_dimensions[r].height = 26
+
+    beveilig(ws)
+    return ws
 
 
 # ---------------------------------------------------------------------------
-# TABBLAD 1 — Instructies
+# TABBLAD 2 — Dashboard
+# ---------------------------------------------------------------------------
+
+def dashboard_kaart(ws, top, kol_links, kol_rechts, icoon_label_formule):
+    """Bouwt de opmaak van één KPI-kaart (kop, grote waarde, badge, rand) en
+    geeft de celadressen terug die de aanroeper met formules moet vullen."""
+    links_idx = column_index_from_string(kol_links)
+    rechts_idx = column_index_from_string(kol_rechts)
+    kolommen = [get_column_letter(k) for k in range(links_idx, rechts_idx + 1)]
+
+    kop_rij = top
+    ws.merge_cells(start_row=kop_rij, start_column=links_idx, end_row=kop_rij, end_column=rechts_idx)
+    kop = ws.cell(row=kop_rij, column=links_idx, value=icoon_label_formule)
+    kop.font = Font(name=FONT_NAME, size=10, bold=True, color=CLR_WIT)
+    kop.alignment = Alignment(horizontal="center", vertical="center")
+    ws.row_dimensions[kop_rij].height = 22
+
+    waarde_rij = kop_rij + 1
+    ws.merge_cells(start_row=waarde_rij, start_column=links_idx, end_row=waarde_rij + 2, end_column=rechts_idx)
+    waarde_cel = ws.cell(row=waarde_rij, column=links_idx)
+    waarde_cel.font = F_KPI_MEGA
+    waarde_cel.alignment = Alignment(horizontal="center", vertical="center")
+    for rij in range(waarde_rij, waarde_rij + 3):
+        ws.row_dimensions[rij].height = 26
+
+    badge_rij = waarde_rij + 3
+    ws.merge_cells(start_row=badge_rij, start_column=links_idx, end_row=badge_rij, end_column=rechts_idx)
+    badge_cel = ws.cell(row=badge_rij, column=links_idx)
+    badge_cel.font = F_BADGE
+    badge_cel.alignment = Alignment(horizontal="center", vertical="center")
+    ws.row_dimensions[badge_rij].height = 22
+
+    kader_vulling(ws, waarde_rij, badge_rij, kolommen, FILL_KAART)
+    kader_rand(ws, kop_rij, badge_rij, kol_links, kol_rechts, CLR_ACCENT, dikte="medium")
+    for kol in range(links_idx, rechts_idx + 1):
+        ws.cell(row=kop_rij, column=kol).fill = FILL_TITEL
+
+    return waarde_cel.coordinate, badge_cel.coordinate, badge_rij + 3
+
+
+def bouw_dashboard(wb, cashflow, pensioen, vermogen):
+    ws = wb.create_sheet("Dashboard")
+    blad_basis(ws, CLR_ACCENT)
+    zet_kolombreedtes(ws, {"A": 2, "B": 24, "C": 24, "D": 3, "E": 24, "F": 24, "G": 2})
+
+    cf = f"'{cashflow['blad']}'"
+    pen = f"'{pensioen['blad']}'"
+    verm = f"'{vermogen['blad']}'"
+
+    r = titelblok(
+        ws, "Dashboard",
+        "Jouw financiële situatie in één oogopslag — werkt automatisch bij zodra je de andere tabbladen invult",
+        "F")
+    r += 1
+
+    # --- Kaart 1: Maandelijks overschot / tekort ---
+    top1 = r
+    waarde, badge, _ = dashboard_kaart(ws, top1, "B", "C", "€   MAANDELIJKS OVERSCHOT / TEKORT")
+    ws[waarde] = f"={cf}!C{cashflow['overschot_rij']}"
+    ws[waarde].number_format = FMT_EURO_ROND
+    ws[badge] = (f'=IF({cf}!C{cashflow["overschot_rij"]}>=0,'
+                f'"✓ Je houdt geld over","⚠ Je geeft meer uit dan je binnenkrijgt")')
+    ws.conditional_formatting.add(
+        waarde, FormulaRule(formula=[f"{cf}!C{cashflow['overschot_rij']}<0"],
+                            font=Font(name=FONT_NAME, size=26, bold=True, color=CLR_ROOD_TEKST)))
+    ws.conditional_formatting.add(
+        badge, FormulaRule(formula=[f"{cf}!C{cashflow['overschot_rij']}>=0"],
+                           fill=FILL_GROEN, font=Font(name=FONT_NAME, size=11, bold=True, color=CLR_GROEN_TEKST)))
+    ws.conditional_formatting.add(
+        badge, FormulaRule(formula=[f"{cf}!C{cashflow['overschot_rij']}<0"],
+                           fill=FILL_ROOD, font=Font(name=FONT_NAME, size=11, bold=True, color=CLR_ROOD_TEKST)))
+
+    # --- Kaart 2: Spaarquote ---
+    sq = f"{cf}!C{cashflow['spaarquote_rij']}"
+    waarde, badge, volgende1 = dashboard_kaart(ws, top1, "E", "F", "%   SPAARQUOTE")
+    ws[waarde] = f'=IF({sq}="","–",{sq})'
+    ws[waarde].number_format = FMT_PCT
+    ws[badge] = (f'=IF({sq}="","Nog geen data",IF({sq}>=0.1,"✓ Gezonde spaarquote",'
+                f'IF({sq}>=0,"⚠ Kan beter","✕ Tekort")))')
+    ws.conditional_formatting.add(
+        badge, FormulaRule(formula=[f'AND({sq}<>"",{sq}>=0.1)'],
+                           fill=FILL_GROEN, font=Font(name=FONT_NAME, size=11, bold=True, color=CLR_GROEN_TEKST)))
+    ws.conditional_formatting.add(
+        badge, FormulaRule(formula=[f'AND({sq}<>"",{sq}>=0,{sq}<0.1)'],
+                           fill=FILL_ORANJE, font=Font(name=FONT_NAME, size=11, bold=True, color=CLR_ORANJE_TEKST)))
+    ws.conditional_formatting.add(
+        badge, FormulaRule(formula=[f'AND({sq}<>"",{sq}<0)'],
+                           fill=FILL_ROOD, font=Font(name=FONT_NAME, size=11, bold=True, color=CLR_ROOD_TEKST)))
+
+    # --- Kaart 3: Pensioengat status ---
+    top2 = volgende1
+    gat = f"{pen}!C{pensioen['gat_rij']}"
+    waarde, badge, _ = dashboard_kaart(ws, top2, "B", "C", "◆   PENSIOENGAT")
+    ws[waarde] = f"={gat}"
+    ws[waarde].number_format = FMT_EURO_ROND
+    ws[badge] = f'=IF({gat}<=0,"✓ Op koers","⚠ Actie nodig")'
+    ws.conditional_formatting.add(
+        badge, FormulaRule(formula=[f"{gat}<=0"],
+                           fill=FILL_GROEN, font=Font(name=FONT_NAME, size=11, bold=True, color=CLR_GROEN_TEKST)))
+    ws.conditional_formatting.add(
+        badge, FormulaRule(formula=[f"{gat}>0"],
+                           fill=FILL_ORANJE, font=Font(name=FONT_NAME, size=11, bold=True, color=CLR_ORANJE_TEKST)))
+
+    # --- Kaart 4: Verwacht vermogen ---
+    waarde, badge, volgende2 = dashboard_kaart(
+        ws, top2, "E", "F", f'=CONCATENATE("↗   VERWACHT VERMOGEN OVER ",{verm}!C{vermogen["jaren_invoer_rij"]}," JAAR")')
+    ws[waarde] = f"={verm}!C{vermogen['eindwaarde_rij']}"
+    ws[waarde].number_format = FMT_EURO_ROND
+    ws[badge] = f'=CONCATENATE("Koopkracht van nu: € ",TEXT({verm}!C{vermogen["reeel_eind_rij"]},"#,##0"))'
+    # Geen CF nodig: deze badge is informatief, geen goed/fout-oordeel — houdt de neutrale kaartkleur.
+
+    r = volgende2 + 1
+    r = sectiebalk(ws, r, "AAN DE SLAG", "F")
+    for stap in [
+        "1  Vul je cijfers in op 'Cashflow Overzicht', 'Pensioengat Calculator' en 'Vermogensgroei'.",
+        "2  Kom terug naar dit Dashboard — de kaarten hierboven werken automatisch bij.",
+        "3  Je maandelijkse overschot loopt automatisch door als voorstel voor je inleg bij pensioen en vermogen; "
+        "dit kun je op elk tabblad overschrijven.",
+        "4  Twijfel je over de kleurcodering of de formules? Kijk op het tabblad 'Instructies'.",
+    ]:
+        r = notitieregel(ws, r, stap, "F")
+    r += 1
+    r = notitieregel(ws, r, DISCLAIMER + ".", "F")
+
+    ws.freeze_panes = "A5"
+    beveilig(ws)
+    return ws
+
+
+# ---------------------------------------------------------------------------
+# TABBLAD 3 — Instructies
 # ---------------------------------------------------------------------------
 
 def bouw_instructies(wb):
     ws = wb.create_sheet("Instructies")
     blad_basis(ws, CLR_DONKERBLAUW)
-    zet_kolombreedtes(ws, {"A": 2, "B": 26, "C": 78, "D": 2})
+    zet_kolombreedtes(ws, {"A": 2, "B": 26, "C": 80, "D": 2})
 
-    r = titelblok(ws, "Geldplanner", "Persoonlijk financieel overzicht voor Nederlandse huishoudens en zzp'ers", "C")
+    r = titelblok(ws, "Geldplanner", "Persoonlijk financieel overzicht voor Nederlandse huishoudens", "C")
 
     r = notitieregel(ws, r, "Welkom", "C", vet=True)
     for regel in [
-        "Deze werkmap helpt je in kaart te brengen wat er maandelijks binnenkomt en weggaat, wat je",
-        "als zzp'er netto overhoudt, hoe groot je pensioengat is en hoe je vermogen groeit.",
-        "Vul alleen de gele cellen in. De grijze en blauwe cellen bevatten formules en zijn vergrendeld.",
+        "Deze werkmap helpt je in kaart te brengen wat er maandelijks binnenkomt en weggaat, hoe groot je",
+        "pensioengat is en hoe je vermogen groeit. Het Dashboard geeft een direct overzicht van je situatie.",
+        "Vul alleen de gele cellen in. De grijze, blauwe en goudkleurige cellen bevatten formules en zijn vergrendeld.",
     ]:
         r = notitieregel(ws, r, regel, "C")
     r += 1
@@ -240,21 +573,23 @@ def bouw_instructies(wb):
     r += 1
 
     uitleg = [
-        ("1. Instructies",
+        ("1. Titelblad",
+         "Voorblad met een plek voor je eigen logo, de productnaam en een korte introductie."),
+        ("2. Dashboard",
+         "Vier KPI-kaarten die automatisch bijwerken vanuit de andere tabbladen: je maandelijkse "
+         "overschot, je spaarquote, de status van je pensioengat en je verwachte vermogen."),
+        ("3. Instructies",
          "Deze pagina: uitleg, kleurcodering en de disclaimer."),
-        ("2. Cashflow Overzicht",
+        ("4. Cashflow Overzicht",
          "Vul je maandelijkse inkomsten, vaste lasten en variabele kosten in. Je ziet direct je "
          "totale inkomsten, totale uitgaven, het maandelijkse overschot of tekort en je spaarquote."),
-        ("3. ZZP Belastingtool",
-         "Vul je jaaromzet, zakelijke kosten en of je aan het urencriterium voldoet in. Je krijgt een "
-         "schatting van je belastbare winst, inkomstenbelasting, heffingskortingen, "
-         "Zvw-bijdrage en wat je netto per maand overhoudt."),
-        ("4. Pensioengat Calculator",
+        ("5. Pensioengat Calculator",
          "Vul je leeftijd, gewenste pensioenleeftijd, gewenst pensioeninkomen, opgebouwd "
-         "pensioenvermogen en verwachte AOW in. Je ziet het gat en het bedrag dat je maandelijks "
-         "moet sparen of beleggen om het te dichten."),
-        ("5. Vermogensgroei",
-         "Vul je startkapitaal, maandelijkse inleg, verwacht rendement en looptijd in. Je ziet de "
+         "pensioenvermogen en verwachte AOW in. Je maandelijkse overschot uit 'Cashflow Overzicht' "
+         "loopt automatisch door als voorstel voor je pensioeninleg; je kunt dit overschrijven."),
+        ("6. Vermogensgroei",
+         "Vul je startkapitaal, verwacht rendement en looptijd in. Ook hier loopt je overschot uit "
+         "'Cashflow Overzicht' automatisch door als voorstel voor je maandelijkse inleg. Je ziet de "
          "geprojecteerde waarde per jaar plus een grafiek van de groei."),
     ]
     for naam, tekst in uitleg:
@@ -276,8 +611,10 @@ def bouw_instructies(wb):
          "Hier vul je zelf iets in. Alleen deze cellen zijn bewerkbaar."),
         (FILL_BEREKEND, RAND_BEREKEND, "Berekende cel (grijs)",
          "Bevat een formule. Vergrendeld zodat je niet per ongeluk een berekening overschrijft."),
-        (FILL_RESULTAAT, RAND_RESULTAAT, "Eindresultaat (blauw)",
-         "De belangrijkste uitkomst van een sectie. Ook vergrendeld."),
+        (FILL_RESULTAAT, RAND_RESULTAAT, "Sectieresultaat (blauw)",
+         "Het eindresultaat van een sectie. Ook vergrendeld."),
+        (FILL_KPI, RAND_ACCENT, "Hoofduitkomst (goud, groot)",
+         "De belangrijkste cijfer van het hele tabblad, bijvoorbeeld je pensioengat."),
     ]
     for vulling, rand, naam, tekst in legenda:
         b = ws.cell(row=r, column=2, value=naam)
@@ -290,22 +627,26 @@ def bouw_instructies(wb):
         c.alignment = Alignment(vertical="center", indent=1)
         r += 1
     r += 1
+    r = notitieregel(ws, r,
+                     "Op het Dashboard betekent een groene badge dat je situatie gezond is, "
+                     "oranje dat er een aandachtspunt is en rood dat directe actie nodig is.", "C")
+    r += 1
 
     r = sectiebalk(ws, r, "ZO GEBRUIK JE DE WERKMAP", "C")
     stappen = [
         "1. Begin bij 'Cashflow Overzicht' en vul je maandbudget in. Alles wat niet van toepassing is laat je op 0 staan.",
-        "2. Ben je zzp'er? Ga daarna naar 'ZZP Belastingtool' en schat je netto maandinkomen.",
-        "3. Gebruik dat netto bedrag als inkomen in het cashflow-overzicht.",
-        "4. Stop je maandelijkse overschot in 'Vermogensgroei' om te zien wat dat op termijn oplevert.",
-        "5. Controleer met 'Pensioengat Calculator' of dat genoeg is voor je gewenste pensioen.",
-        "6. De bladen zijn beveiligd zonder wachtwoord. Wil je formules aanpassen? Controleren > Blad-beveiliging opheffen.",
-        "7. Bedragen staan in euro's. Op een Nederlandse Excel-installatie verschijnen ze als € 1.234,56.",
+        "2. Bekijk het 'Dashboard' voor een overzicht van je situatie.",
+        "3. Ga naar 'Pensioengat Calculator' en 'Vermogensgroei'. Je maandelijkse overschot uit stap 1 loopt daar "
+        "automatisch door als voorstel voor je inleg — kies 'Nee' bij de koppeling om je eigen bedrag te gebruiken.",
+        "4. De bladen zijn beveiligd zonder wachtwoord. Wil je formules aanpassen? Controleren > Blad-beveiliging opheffen.",
+        "5. Bedragen staan in euro's. Op een Nederlandse Excel-installatie verschijnen ze als € 1.234,56.",
     ]
     for stap in stappen:
         cel = ws.cell(row=r, column=2, value=stap)
         ws.merge_cells(start_row=r, start_column=2, end_row=r, end_column=3)
         cel.font = F_TEKST
-        cel.alignment = Alignment(vertical="center", indent=1)
+        cel.alignment = Alignment(vertical="center", indent=1, wrap_text=True)
+        ws.row_dimensions[r].height = 30 if len(stap) > 95 else 17
         r += 1
     r += 1
 
@@ -314,11 +655,10 @@ def bouw_instructies(wb):
     cel = ws.cell(row=r, column=2)
     cel.value = (
         DISCLAIMER + ".\n\n"
-        "De belastingtarieven, heffingskortingen en aftrekposten in dit bestand zijn indicatieve "
-        "cijfers voor 2026 en kunnen door de wetgever worden gewijzigd. Controleer de actuele "
-        "bedragen altijd op belastingdienst.nl. Rendementen uit het verleden bieden geen garantie "
-        "voor de toekomst; beleggen brengt risico's met zich mee en je kunt je inleg verliezen.\n"
-        "Raadpleeg voor persoonlijk advies een financieel adviseur, boekhouder of belastingadviseur."
+        "Rendementen uit het verleden bieden geen garantie voor de toekomst; beleggen brengt risico's "
+        "met zich mee en je kunt je inleg verliezen. De berekeningen zijn schattingen op basis van de "
+        "aannames die je zelf invult.\n"
+        "Raadpleeg voor persoonlijk advies een financieel adviseur."
     )
     cel.font = Font(name=FONT_NAME, size=11, bold=True, color="9C0006")
     cel.fill = FILL_ROOD
@@ -336,7 +676,7 @@ def bouw_instructies(wb):
 
 
 # ---------------------------------------------------------------------------
-# TABBLAD 2 — Cashflow Overzicht
+# TABBLAD 4 — Cashflow Overzicht
 # ---------------------------------------------------------------------------
 
 def bouw_cashflow(wb):
@@ -352,7 +692,7 @@ def bouw_cashflow(wb):
     inkomsten_start = r
     r = invoerregel(ws, r, "Nettosalaris persoon 1", 3600, notitie="Bedrag dat op je rekening staat")
     r = invoerregel(ws, r, "Nettosalaris persoon 2", 0, notitie="Laat op 0 staan als je alleenstaand bent")
-    r = invoerregel(ws, r, "Freelance-inkomsten (netto)", 0, notitie="Zie tabblad 'ZZP Belastingtool'")
+    r = invoerregel(ws, r, "Freelance-inkomsten (netto)", 0, notitie="Netto bedrag, na belasting")
     r = invoerregel(ws, r, "Toeslagen (huur-, zorg-, kinderopvang)", 0)
     r = invoerregel(ws, r, "Huurinkomsten / alimentatie", 0)
     r = invoerregel(ws, r, "Overige inkomsten", 0)
@@ -360,6 +700,7 @@ def bouw_cashflow(wb):
     tot_inkomsten_rij = r
     r = berekendregel(ws, r, "Totale inkomsten",
                       f"=SUM(C{inkomsten_start}:C{inkomsten_eind})")
+    sectie_kaart(ws, inkomsten_start, tot_inkomsten_rij, "D")
     r += 1
 
     # --- Vaste lasten ---
@@ -378,6 +719,7 @@ def bouw_cashflow(wb):
     vast_eind = r - 1
     tot_vast_rij = r
     r = berekendregel(ws, r, "Totaal vaste lasten", f"=SUM(C{vast_start}:C{vast_eind})")
+    sectie_kaart(ws, vast_start, tot_vast_rij, "D")
     r += 1
 
     # --- Variabele kosten ---
@@ -393,9 +735,11 @@ def bouw_cashflow(wb):
     var_eind = r - 1
     tot_var_rij = r
     r = berekendregel(ws, r, "Totaal variabele kosten", f"=SUM(C{var_start}:C{var_eind})")
+    sectie_kaart(ws, var_start, tot_var_rij, "D")
     r += 1
 
     # --- Resultaat ---
+    resultaat_start = r
     r = sectiebalk(ws, r, "RESULTAAT")
     res_inkomsten = r
     r = berekendregel(ws, r, "Totale inkomsten", f"=C{tot_inkomsten_rij}")
@@ -403,8 +747,9 @@ def bouw_cashflow(wb):
     r = berekendregel(ws, r, "Totale uitgaven", f"=C{tot_vast_rij}+C{tot_var_rij}")
     overschot_rij = r
     r = berekendregel(ws, r, "Maandelijks overschot / tekort",
-                      f"=C{res_inkomsten}-C{res_uitgaven}", accent=True,
+                      f"=C{res_inkomsten}-C{res_uitgaven}", groot=True,
                       notitie="Positief = je houdt over. Negatief = je komt tekort.")
+    spaarquote_rij = r
     r = berekendregel(ws, r, "Spaarquote",
                       f'=IF(C{res_inkomsten}=0,"",C{overschot_rij}/C{res_inkomsten})',
                       notatie=FMT_PCT, notitie="Deel van je inkomen dat je overhoudt")
@@ -423,17 +768,19 @@ def bouw_cashflow(wb):
     r += 1
     r = invoerregel(ws, buffer_invoer_rij, "Huidig spaargeld (buffer)", 5000,
                     notitie="Wordt gebruikt voor de bufferberekening hierboven")
+    resultaat_eind = r
+    sectie_kaart(ws, resultaat_start + 1, resultaat_eind, "D")
     r += 1
 
     # Voorwaardelijke opmaak: groen bij overschot, rood bij tekort.
     ws.conditional_formatting.add(
         f"C{overschot_rij}",
         CellIsRule(operator="lessThan", formula=["0"], fill=FILL_ROOD,
-                   font=Font(name=FONT_NAME, size=12, bold=True, color="9C0006")))
+                   font=Font(name=FONT_NAME, size=20, bold=True, color=CLR_ROOD_TEKST)))
     ws.conditional_formatting.add(
         f"C{overschot_rij}",
         CellIsRule(operator="greaterThanOrEqual", formula=["0"], fill=FILL_GROEN,
-                   font=Font(name=FONT_NAME, size=12, bold=True, color="375623")))
+                   font=Font(name=FONT_NAME, size=20, bold=True, color=CLR_GROEN_TEKST)))
 
     # --- Grafiekgegevens ---
     r += 1
@@ -485,251 +832,28 @@ def bouw_cashflow(wb):
 
     ws.freeze_panes = "A5"
     beveilig(ws)
-    return ws
+    return ws, {
+        "blad": "Cashflow Overzicht",
+        "overschot_rij": overschot_rij,
+        "spaarquote_rij": spaarquote_rij,
+        "inkomsten_rij": res_inkomsten,
+        "uitgaven_rij": res_uitgaven,
+    }
 
 
 # ---------------------------------------------------------------------------
-# TABBLAD 3 — ZZP Belastingtool
+# TABBLAD 5 — Pensioengat Calculator
 # ---------------------------------------------------------------------------
 
-def bouw_zzp(wb):
-    ws = wb.create_sheet("ZZP Belastingtool")
-    blad_basis(ws, "548235")
-    zet_kolombreedtes(ws, {"A": 2, "B": 42, "C": 16, "D": 50, "E": 2,
-                           "F": 14, "G": 14, "H": 14, "I": 14})
-
-    r = titelblok(ws, "ZZP Belastingtool", "Schatting van je inkomstenbelasting en netto maandinkomen (box 1)", "E")
-
-    # --- Waarschuwing ---
-    ws.merge_cells(f"B{r}:E{r + 1}")
-    waarschuwing = ws.cell(row=r, column=2)
-    waarschuwing.value = ("LET OP: dit is een schatting, geen garantie. De uitkomst is geen aangifte en geen "
-                          "financieel of fiscaal advies. Tarieven en kortingen voor 2026 zijn indicatief — "
-                          "controleer ze op belastingdienst.nl en pas ze zo nodig hieronder aan.")
-    waarschuwing.font = Font(name=FONT_NAME, size=10, bold=True, color="9C6500")
-    waarschuwing.fill = PatternFill("solid", fgColor="FFF2CC")
-    waarschuwing.border = Border(left=Side(style="medium", color=CLR_GEEL_RAND),
-                                 right=Side(style="medium", color=CLR_GEEL_RAND),
-                                 top=Side(style="medium", color=CLR_GEEL_RAND),
-                                 bottom=Side(style="medium", color=CLR_GEEL_RAND))
-    waarschuwing.alignment = Alignment(vertical="center", wrap_text=True, indent=1)
-    ws.row_dimensions[r].height = 20
-    ws.row_dimensions[r + 1].height = 20
-    r += 3
-
-    # --- Invoer ---
-    r = sectiebalk(ws, r, laatste_kolom="E", tekst="JOUW GEGEVENS")
-    omzet_rij = r
-    r = invoerregel(ws, r, "Jaaromzet als freelancer (excl. btw)", 75000,
-                    notitie="Alle facturen samen, exclusief btw")
-    kosten_rij = r
-    r = invoerregel(ws, r, "Zakelijke kosten per jaar", 8000,
-                    notitie="Laptop, verzekeringen, kantoor, reiskosten, boekhouder")
-    uren_rij = r
-    r = invoerregel(ws, r, "Voldoe je aan het urencriterium?", "Ja", notatie="General",
-                    notitie="1.225 uur per jaar → recht op zelfstandigenaftrek")
-    starter_rij = r
-    r = invoerregel(ws, r, "Recht op startersaftrek dit jaar?", "Nee", notatie="General",
-                    notitie="Max. 3x in de eerste 5 jaar als ondernemer")
-    for_rij = r
-    r = invoerregel(ws, r, "Overige aftrekposten", 0,
-                    notitie="Bijv. meewerkaftrek of stakingsaftrek")
-    aow_leeftijd_rij = r
-    r = invoerregel(ws, r, "Heb je de AOW-leeftijd bereikt?", "Nee", notatie="General",
-                    notitie="Vanaf de AOW-leeftijd gelden lagere tarieven (hier niet doorgerekend)")
-    r += 1
-
-    ja_nee = DataValidation(type="list", formula1='"Ja,Nee"', allow_blank=False,
-                            showDropDown=False)
-    ja_nee.error = "Kies Ja of Nee."
-    ja_nee.errorTitle = "Ongeldige invoer"
-    ws.add_data_validation(ja_nee)
-    for rij in (uren_rij, starter_rij, aow_leeftijd_rij):
-        ja_nee.add(ws.cell(row=rij, column=3))
-
-    # --- Parameters ---
-    r = sectiebalk(ws, r, laatste_kolom="E", tekst="BELASTINGPARAMETERS 2026 (INDICATIEF — AANPASBAAR)")
-    p_grens1 = r
-    r = invoerregel(ws, r, "Schijf 1 — grens", 38883, notatie=FMT_EURO_ROND,
-                    notitie="Inkomen tot en met dit bedrag valt in schijf 1")
-    p_tarief1 = r
-    r = invoerregel(ws, r, "Schijf 1 — tarief", 0.3570, notatie=FMT_PCT2,
-                    notitie="Inclusief premies volksverzekeringen")
-    p_grens2 = r
-    r = invoerregel(ws, r, "Schijf 2 — grens", 79137, notatie=FMT_EURO_ROND)
-    p_tarief2 = r
-    r = invoerregel(ws, r, "Schijf 2 — tarief", 0.3756, notatie=FMT_PCT2)
-    p_tarief3 = r
-    r = invoerregel(ws, r, "Schijf 3 — tarief (boven schijf 2)", 0.4950, notatie=FMT_PCT2)
-    p_zelfst = r
-    r = invoerregel(ws, r, "Zelfstandigenaftrek", 1200, notatie=FMT_EURO_ROND,
-                    notitie="Wordt jaarlijks afgebouwd")
-    p_starters = r
-    r = invoerregel(ws, r, "Startersaftrek", 2123, notatie=FMT_EURO_ROND)
-    p_mkb = r
-    r = invoerregel(ws, r, "MKB-winstvrijstelling", 0.127, notatie=FMT_PCT2,
-                    notitie="Over de winst na ondernemersaftrek")
-    p_ahk_max = r
-    r = invoerregel(ws, r, "Algemene heffingskorting — maximum", 3115, notatie=FMT_EURO_ROND)
-    p_ahk_start = r
-    r = invoerregel(ws, r, "Algemene heffingskorting — afbouw vanaf", 29529, notatie=FMT_EURO_ROND)
-    p_ahk_pct = r
-    r = invoerregel(ws, r, "Algemene heffingskorting — afbouwpercentage", 0.06337, notatie=FMT_PCT2)
-    p_zvw_pct = r
-    r = invoerregel(ws, r, "Zvw-bijdrage (inkomensafhankelijk)", 0.0526, notatie=FMT_PCT2,
-                    notitie="Betaal je als ondernemer zelf via de aanslag")
-    p_zvw_max = r
-    r = invoerregel(ws, r, "Zvw — maximumgrondslag", 78727, notatie=FMT_EURO_ROND)
-    r += 1
-
-    # --- Arbeidskorting-tabel ---
-    r = sectiebalk(ws, r, laatste_kolom="E", tekst="ARBEIDSKORTING — OPBOUW EN AFBOUW (INDICATIEF 2026)")
-    ak_kop = r
-    koppen = ["Schijf", "Vanaf", "Basisbedrag", "Percentage"]
-    for i, tekst in enumerate(koppen):
-        cel = ws.cell(row=r, column=2 + i, value=tekst)
-        cel.font = F_KOP
-        cel.fill = FILL_RESULTAAT
-        cel.border = RAND_RESULTAAT
-        cel.alignment = Alignment(horizontal="center", vertical="center")
-    r += 1
-    ak_start = r
-    ak_rijen = [
-        ("1 — opbouw", 0, 0, 0.08053),
-        ("2 — opbouw", 12400, 999, 0.30030),
-        ("3 — opbouw", 26800, 5322, 0.02258),
-        ("4 — afbouw", 43900, 5712, 0.06510),
-    ]
-    for naam, vanaf, basis, pct in ak_rijen:
-        lbl = ws.cell(row=r, column=2, value=naam)
-        lbl.font = F_LABEL
-        lbl.alignment = Alignment(vertical="center", indent=1)
-        for kol, waarde, notatie in ((3, vanaf, FMT_EURO_ROND),
-                                     (4, basis, FMT_EURO_ROND),
-                                     (5, pct, FMT_PCT2)):
-            cel = ws.cell(row=r, column=kol, value=waarde)
-            cel.fill = FILL_INVOER
-            cel.border = RAND_INVOER
-            cel.number_format = notatie
-            cel.font = F_LABEL
-            cel.protection = ONBESCHERMD
-            cel.alignment = Alignment(horizontal="right", vertical="center", indent=1)
-        r += 1
-    ak_1, ak_2, ak_3, ak_4 = ak_start, ak_start + 1, ak_start + 2, ak_start + 3
-    ws.column_dimensions["E"].width = 14
-    r = notitieregel(ws, r, "In schijf 4 wordt de arbeidskorting afgebouwd; het percentage geldt daar als aftrek.", "E")
-    r += 1
-
-    # --- Berekening ---
-    r = sectiebalk(ws, r, laatste_kolom="E", tekst="BEREKENING")
-    winst_rij = r
-    r = berekendregel(ws, r, "Winst uit onderneming", f"=C{omzet_rij}-C{kosten_rij}",
-                      notitie="Omzet minus zakelijke kosten")
-    zelfst_rij = r
-    r = berekendregel(ws, r, "Zelfstandigenaftrek",
-                      f'=IF(C{uren_rij}="Ja",MIN(C{p_zelfst},MAX(0,C{winst_rij})),0)',
-                      notitie="Niet hoger dan de winst")
-    starters_rij = r
-    r = berekendregel(ws, r, "Startersaftrek",
-                      f'=IF(AND(C{uren_rij}="Ja",C{starter_rij}="Ja"),C{p_starters},0)',
-                      notitie="Mag de winst wel overschrijden")
-    ondernemersaftrek_rij = r
-    r = berekendregel(ws, r, "Totale ondernemersaftrek",
-                      f"=C{zelfst_rij}+C{starters_rij}+C{for_rij}")
-    winst_na_aftrek_rij = r
-    r = berekendregel(ws, r, "Winst na ondernemersaftrek",
-                      f"=MAX(0,C{winst_rij}-C{ondernemersaftrek_rij})")
-    mkb_rij = r
-    r = berekendregel(ws, r, "MKB-winstvrijstelling",
-                      f"=C{winst_na_aftrek_rij}*C{p_mkb}")
-    belastbaar_rij = r
-    r = berekendregel(ws, r, "Belastbare winst (box 1)",
-                      f"=MAX(0,C{winst_na_aftrek_rij}-C{mkb_rij})", accent=True)
-    ib_bruto_rij = r
-    r = berekendregel(
-        ws, r, "Inkomstenbelasting vóór heffingskortingen",
-        f"=MIN(C{belastbaar_rij},C{p_grens1})*C{p_tarief1}"
-        f"+MAX(0,MIN(C{belastbaar_rij},C{p_grens2})-C{p_grens1})*C{p_tarief2}"
-        f"+MAX(0,C{belastbaar_rij}-C{p_grens2})*C{p_tarief3}",
-        notitie="Schijventarief toegepast op de belastbare winst")
-    ahk_rij = r
-    r = berekendregel(
-        ws, r, "Algemene heffingskorting",
-        f"=MAX(0,C{p_ahk_max}-MAX(0,C{belastbaar_rij}-C{p_ahk_start})*C{p_ahk_pct})",
-        notitie="Bouwt af naarmate je inkomen stijgt")
-    ak_rij = r
-    r = berekendregel(
-        ws, r, "Arbeidskorting",
-        f"=IF(C{belastbaar_rij}<=C{ak_2},D{ak_1}+C{belastbaar_rij}*E{ak_1},"
-        f"IF(C{belastbaar_rij}<=C{ak_3},D{ak_2}+(C{belastbaar_rij}-C{ak_2})*E{ak_2},"
-        f"IF(C{belastbaar_rij}<=C{ak_4},D{ak_3}+(C{belastbaar_rij}-C{ak_3})*E{ak_3},"
-        f"MAX(0,D{ak_4}-(C{belastbaar_rij}-C{ak_4})*E{ak_4}))))",
-        notitie="Op basis van de tabel hierboven")
-    kortingen_rij = r
-    r = berekendregel(ws, r, "Totaal heffingskortingen", f"=C{ahk_rij}+C{ak_rij}")
-    ib_netto_rij = r
-    r = berekendregel(ws, r, "Te betalen inkomstenbelasting",
-                      f"=MAX(0,C{ib_bruto_rij}-C{kortingen_rij})",
-                      notitie="Heffingskortingen worden niet uitbetaald onder nul")
-    zvw_rij = r
-    r = berekendregel(ws, r, "Zvw-bijdrage",
-                      f"=MIN(C{belastbaar_rij},C{p_zvw_max})*C{p_zvw_pct}")
-    totale_heffing_rij = r
-    r = berekendregel(ws, r, "Totaal te betalen (IB + Zvw)",
-                      f"=C{ib_netto_rij}+C{zvw_rij}", accent=True)
-    r += 1
-
-    # --- Uitkomst ---
-    r = sectiebalk(ws, r, laatste_kolom="E", tekst="WAT HOUD JE OVER?")
-    netto_jaar_rij = r
-    r = berekendregel(ws, r, "Netto besteedbaar per jaar",
-                      f"=C{winst_rij}-C{totale_heffing_rij}", accent=True,
-                      notitie="Winst minus inkomstenbelasting en Zvw-bijdrage")
-    netto_maand_rij = r
-    r = berekendregel(ws, r, "Netto besteedbaar per maand",
-                      f"=C{netto_jaar_rij}/12", accent=True,
-                      notitie="Neem dit bedrag over in 'Cashflow Overzicht'")
-    r = berekendregel(ws, r, "Gemiddelde belastingdruk",
-                      f'=IF(C{winst_rij}<=0,"",C{totale_heffing_rij}/C{winst_rij})',
-                      notatie=FMT_PCT, notitie="Als percentage van je winst")
-    reservering_rij = r
-    r = berekendregel(ws, r, "Reserveer per maand voor de aanslag",
-                      f"=C{totale_heffing_rij}/12",
-                      notitie="Zet dit apart op een aparte rekening")
-    r = berekendregel(ws, r, "Marginaal tarief op de volgende euro winst",
-                      f"=IF(C{belastbaar_rij}<C{p_grens1},C{p_tarief1},"
-                      f"IF(C{belastbaar_rij}<C{p_grens2},C{p_tarief2},C{p_tarief3}))*(1-C{p_mkb})",
-                      notatie=FMT_PCT,
-                      notitie="Bij benadering, inclusief MKB-winstvrijstelling")
-    r += 1
-
-    r = notitieregel(ws, r, "Niet meegenomen in deze schatting:", "E", vet=True)
-    for tekst in [
-        "• Btw-aangifte (btw loopt buiten je winst om), inkomen van een fiscaal partner en box 3-vermogen.",
-        "• Fiscale oudedagsreserve, investeringsaftrek (KIA), afschrijvingen en middeling.",
-        "• Loon uit dienstbetrekking naast je onderneming; dat verhoogt je schijf en verlaagt je kortingen.",
-        "• Inkomensafhankelijke toeslagen en de tarieven vanaf de AOW-leeftijd.",
-    ]:
-        r = notitieregel(ws, r, tekst, "E")
-    r += 1
-    r = notitieregel(ws, r, DISCLAIMER + ". Dit is een schatting, geen garantie.", "E")
-
-    ws.freeze_panes = "A5"
-    beveilig(ws)
-    return ws
-
-
-# ---------------------------------------------------------------------------
-# TABBLAD 4 — Pensioengat Calculator
-# ---------------------------------------------------------------------------
-
-def bouw_pensioen(wb):
+def bouw_pensioen(wb, cashflow):
     ws = wb.create_sheet("Pensioengat Calculator")
     blad_basis(ws, "7030A0")
     zet_kolombreedtes(ws, {"A": 2, "B": 44, "C": 16, "D": 52, "E": 2})
+    cf = f"'{cashflow['blad']}'"
 
     r = titelblok(ws, "Pensioengat Calculator", "Hoeveel moet je maandelijks opzijzetten voor het pensioen dat je wilt?", "D")
 
+    situatie_start = r
     r = sectiebalk(ws, r, "JOUW SITUATIE")
     leeftijd_rij = r
     r = invoerregel(ws, r, "Huidige leeftijd", 38, notatie=FMT_JAAR)
@@ -748,11 +872,31 @@ def bouw_pensioen(wb):
     vermogen_rij = r
     r = invoerregel(ws, r, "Huidig opgebouwd pensioenvermogen", 30000,
                     notitie="Lijfrente, banksparen, beleggingen bestemd voor pensioen")
-    inleg_rij = r
-    r = invoerregel(ws, r, "Wat leg je nu al maandelijks in?", 150,
-                    notitie="Wordt van de benodigde inleg afgetrokken")
+    sectie_kaart(ws, situatie_start + 1, r - 1, "D")
     r += 1
 
+    # --- Koppeling met Cashflow Overzicht ---
+    koppel_start = r
+    r = sectiebalk(ws, r, "KOPPELING MET CASHFLOW OVERZICHT", accent=True)
+    voorstel_rij = r
+    r = berekendregel(ws, r, "Voorstel: maandelijks overschot uit Cashflow Overzicht",
+                      f"={cf}!C{cashflow['overschot_rij']}",
+                      notitie="Wordt automatisch bijgewerkt zodra je dat tabblad invult")
+    gebruik_voorstel_rij = r
+    r = invoerregel(ws, r, "Gebruik dit voorstel als je huidige pensioeninleg?", "Ja", notatie="General",
+                    notitie="Kies 'Nee' om je eigen bedrag hieronder te gebruiken")
+    eigen_inleg_rij = r
+    r = invoerregel(ws, r, "Eigen invoer (alleen gebruikt bij 'Nee')", 150,
+                    notitie="Vul hier je eigen maandelijkse pensioeninleg in")
+    inleg_rij = r
+    r = berekendregel(ws, r, "Wat leg je nu al maandelijks in?",
+                      f'=IF(C{gebruik_voorstel_rij}="Ja",C{voorstel_rij},C{eigen_inleg_rij})',
+                      accent=True, notitie="Gebruikt in de berekening hieronder")
+    ja_nee_validatie(ws, [gebruik_voorstel_rij])
+    sectie_kaart(ws, koppel_start + 1, r - 1, "D")
+    r += 1
+
+    aannames_start = r
     r = sectiebalk(ws, r, "AANNAMES")
     rendement_rij = r
     r = invoerregel(ws, r, "Verwacht rendement vóór pensioen (per jaar)", 0.05, notatie=FMT_PCT,
@@ -766,8 +910,10 @@ def bouw_pensioen(wb):
     duur_rij = r
     r = invoerregel(ws, r, "Aantal jaren dat je pensioen moet duren", 25, notatie=FMT_JAAR,
                     notitie="Levensverwachting bij 67 is ruim 18 jaar; 25 is voorzichtig")
+    sectie_kaart(ws, aannames_start + 1, r - 1, "D")
     r += 1
 
+    gat_start = r
     r = sectiebalk(ws, r, "HET PENSIOENGAT")
     jaren_rij = r
     r = berekendregel(ws, r, "Jaren tot je pensioen",
@@ -804,10 +950,12 @@ def bouw_pensioen(wb):
         notitie="Wat je huidige inleg oplevert als je die volhoudt")
     gat_rij = r
     r = berekendregel(ws, r, "PENSIOENGAT (tekort aan kapitaal)",
-                      f"=MAX(0,C{kapitaal_rij}-C{groei_rij}-C{groei_inleg_rij})", accent=True,
+                      f"=MAX(0,C{kapitaal_rij}-C{groei_rij}-C{groei_inleg_rij})", groot=True,
                       notitie="Nul betekent: je ligt op koers")
+    sectie_kaart(ws, gat_start + 1, r - 1, "D")
     r += 1
 
+    doen_start = r
     r = sectiebalk(ws, r, "WAT MOET JE DOEN?")
     maandrente_rij = r
     r = berekendregel(ws, r, "Maandelijks rendement (samengesteld)",
@@ -830,19 +978,22 @@ def bouw_pensioen(wb):
     r = berekendregel(ws, r, "Dekkingsgraad zonder extra inleg",
                       f'=IF(C{kapitaal_rij}<=0,"",(C{groei_rij}+C{groei_inleg_rij})/C{kapitaal_rij})',
                       notatie=FMT_PCT, notitie="100% = je huidige plan is toereikend")
+    sectie_kaart(ws, doen_start + 1, r - 1, "D")
     r += 1
 
     ws.conditional_formatting.add(
         f"C{gat_rij}",
-        CellIsRule(operator="greaterThan", formula=["0"], fill=FILL_ROOD,
-                   font=Font(name=FONT_NAME, size=12, bold=True, color="9C0006")))
+        CellIsRule(operator="greaterThan", formula=["0"], fill=FILL_ORANJE,
+                   font=Font(name=FONT_NAME, size=20, bold=True, color=CLR_ORANJE_TEKST)))
     ws.conditional_formatting.add(
         f"C{gat_rij}",
         CellIsRule(operator="lessThanOrEqual", formula=["0"], fill=FILL_GROEN,
-                   font=Font(name=FONT_NAME, size=12, bold=True, color="375623")))
+                   font=Font(name=FONT_NAME, size=20, bold=True, color=CLR_GROEN_TEKST)))
 
     r = notitieregel(ws, r, "Hoe deze berekening werkt", "D", vet=True)
     for tekst in [
+        "• Je maandelijkse inleg is gekoppeld aan je overschot in 'Cashflow Overzicht'; kies 'Nee' bij de "
+        "koppeling hierboven om je eigen bedrag te gebruiken.",
         "• Je gewenste inkomen wordt met de inflatie opgehoogd naar je pensioendatum.",
         "• Het benodigde kapitaal is de contante waarde van je maandelijkse tekort over de hele pensioenperiode,",
         "   verdisconteerd tegen het reële rendement, zodat je uitkering koopkrachtvast blijft.",
@@ -855,31 +1006,56 @@ def bouw_pensioen(wb):
 
     ws.freeze_panes = "A5"
     beveilig(ws)
-    return ws
+    return ws, {
+        "blad": "Pensioengat Calculator",
+        "gat_rij": gat_rij,
+        "jaren_rij": jaren_rij,
+        "extra_rij": extra_rij,
+    }
 
 
 # ---------------------------------------------------------------------------
-# TABBLAD 5 — Vermogensgroei
+# TABBLAD 6 — Vermogensgroei
 # ---------------------------------------------------------------------------
 
 MAX_JAREN = 40
 
 
-def bouw_vermogen(wb):
+def bouw_vermogen(wb, cashflow):
     ws = wb.create_sheet("Vermogensgroei")
     blad_basis(ws, "BF8F00")
     zet_kolombreedtes(ws, {"A": 2, "B": 40, "C": 16, "D": 46, "E": 2,
                            "F": 8, "G": 15, "H": 15, "I": 15, "J": 15, "K": 15, "L": 15})
+    cf = f"'{cashflow['blad']}'"
 
     r = titelblok(ws, "Vermogensgroei", "Projectie van je vermogen met samengestelde rente", "D")
 
+    # --- Koppeling met Cashflow Overzicht ---
+    koppel_start = r
+    r = sectiebalk(ws, r, "KOPPELING MET CASHFLOW OVERZICHT", accent=True)
+    voorstel_rij = r
+    r = berekendregel(ws, r, "Voorstel: maandelijks overschot uit Cashflow Overzicht",
+                      f"={cf}!C{cashflow['overschot_rij']}",
+                      notitie="Wordt automatisch bijgewerkt zodra je dat tabblad invult")
+    gebruik_voorstel_rij = r
+    r = invoerregel(ws, r, "Gebruik dit voorstel als maandelijkse inleg?", "Ja", notatie="General",
+                    notitie="Kies 'Nee' om je eigen bedrag hieronder te gebruiken")
+    eigen_inleg_rij = r
+    r = invoerregel(ws, r, "Eigen invoer (alleen gebruikt bij 'Nee')", 500,
+                    notitie="Vul hier je eigen maandelijkse inleg in")
+    ja_nee_validatie(ws, [gebruik_voorstel_rij])
+    sectie_kaart(ws, koppel_start + 1, r - 1, "D")
+    r += 1
+
+    invoer_start = r
     r = sectiebalk(ws, r, "JOUW INVOER")
     start_rij = r
     r = invoerregel(ws, r, "Huidig spaargeld en beleggingen", 25000,
                     notitie="Je startkapitaal")
     maandinleg_rij = r
-    r = invoerregel(ws, r, "Maandelijkse inleg", 500,
-                    notitie="Bijvoorbeeld je maandelijkse overschot uit tabblad 2")
+    r = berekendregel(ws, r, "Maandelijkse inleg (gebruikt in de projectie)",
+                      f'=IF(C{gebruik_voorstel_rij}="Ja",C{voorstel_rij},C{eigen_inleg_rij})',
+                      accent=True, notitie="Volgt automatisch uit de koppeling hierboven")
     rendement_rij = r
     r = invoerregel(ws, r, "Verwacht rendement per jaar", 0.06, notatie=FMT_PCT,
                     notitie="Spaarrekening ca. 1,5-2%, wereldwijd aandelenfonds historisch ca. 7%")
@@ -892,6 +1068,7 @@ def bouw_vermogen(wb):
     kosten_rij = r
     r = invoerregel(ws, r, "Beleggingskosten per jaar", 0.0035, notatie=FMT_PCT2,
                     notitie="Fondskosten plus servicekosten van je broker")
+    sectie_kaart(ws, invoer_start + 1, r - 1, "D")
     r += 1
 
     jaren_val = DataValidation(type="whole", operator="between",
@@ -901,6 +1078,7 @@ def bouw_vermogen(wb):
     ws.add_data_validation(jaren_val)
     jaren_val.add(ws.cell(row=jaren_rij, column=3))
 
+    afgeleid_start = r
     r = sectiebalk(ws, r, "AFGELEIDE WAARDEN")
     netto_rendement_rij = r
     r = berekendregel(ws, r, "Netto rendement na kosten",
@@ -909,6 +1087,7 @@ def bouw_vermogen(wb):
     maandrente_rij = r
     r = berekendregel(ws, r, "Maandelijks rendement (samengesteld)",
                       f"=(1+C{netto_rendement_rij})^(1/12)-1", notatie='0.000%')
+    sectie_kaart(ws, afgeleid_start + 1, r - 1, "D")
     r += 1
     eind_rij_verwijzing = r  # samenvattingsblok, wordt na de tabel gevuld
     r += 7
@@ -975,19 +1154,22 @@ def bouw_vermogen(wb):
 
     # --- Samenvatting (verwijst naar de laatste zichtbare rij) ---
     rr = eind_rij_verwijzing
+    samenvatting_start = rr
     rr = sectiebalk(ws, rr, "RESULTAAT NA DE GEKOZEN LOOPTIJD")
     eindwaarde_rij = rr
     rr = berekendregel(ws, rr, "Geprojecteerde eindwaarde",
-                       f"=INDEX(J{tabel_start}:J{tabel_eind},C{jaren_rij}+1)", accent=True)
+                       f"=INDEX(J{tabel_start}:J{tabel_eind},C{jaren_rij}+1)", groot=True)
     ingelegd_totaal_rij = rr
     rr = berekendregel(ws, rr, "Totaal zelf ingelegd",
                        f"=INDEX(K{tabel_start}:K{tabel_eind},C{jaren_rij}+1)")
     rr = berekendregel(ws, rr, "Waarvan rendement",
                        f"=C{eindwaarde_rij}-C{ingelegd_totaal_rij}",
                        notitie="Het deel dat je geld voor je heeft verdiend")
+    reeel_eind_rij = rr
     rr = berekendregel(ws, rr, "Eindwaarde in euro's van nu",
                        f"=INDEX(L{tabel_start}:L{tabel_eind},C{jaren_rij}+1)",
                        notitie="Gecorrigeerd voor inflatie: dit is je koopkracht")
+    sectie_kaart(ws, samenvatting_start + 1, rr - 1, "D")
 
     # --- Lijndiagram ---
     grafiek = LineChart()
@@ -1008,13 +1190,20 @@ def bouw_vermogen(wb):
     ws.add_chart(grafiek, f"N{tabel_kop}")
 
     laatste = tabel_eind + 2
-    notitieregel(ws, laatste, "De projectie rekent met maandelijkse bijstortingen en samengestelde groei "
-                              "op basis van het rendement ná kosten.", "D")
-    notitieregel(ws, laatste + 1, DISCLAIMER + ". Rendementen uit het verleden bieden geen garantie voor de toekomst.", "D")
+    notitieregel(ws, laatste, "Je maandelijkse inleg is gekoppeld aan je overschot in 'Cashflow Overzicht'; "
+                              "kies 'Nee' bij de koppeling hierboven om je eigen bedrag te gebruiken.", "D")
+    notitieregel(ws, laatste + 1, "De projectie rekent met maandelijkse bijstortingen en samengestelde groei "
+                                  "op basis van het rendement ná kosten.", "D")
+    notitieregel(ws, laatste + 2, DISCLAIMER + ". Rendementen uit het verleden bieden geen garantie voor de toekomst.", "D")
 
     ws.freeze_panes = "A5"
     beveilig(ws)
-    return ws
+    return ws, {
+        "blad": "Vermogensgroei",
+        "eindwaarde_rij": eindwaarde_rij,
+        "reeel_eind_rij": reeel_eind_rij,
+        "jaren_invoer_rij": jaren_rij,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -1025,14 +1214,19 @@ def bouw_werkmap():
     wb = Workbook()
     wb.remove(wb.active)
 
+    _, cashflow_ref = bouw_cashflow(wb)
+    _, pensioen_ref = bouw_pensioen(wb, cashflow_ref)
+    _, vermogen_ref = bouw_vermogen(wb, cashflow_ref)
+    bouw_dashboard(wb, cashflow_ref, pensioen_ref, vermogen_ref)
+    bouw_titelblad(wb)
     bouw_instructies(wb)
-    bouw_cashflow(wb)
-    bouw_zzp(wb)
-    bouw_pensioen(wb)
-    bouw_vermogen(wb)
+
+    volgorde = ["Titelblad", "Dashboard", "Instructies",
+               "Cashflow Overzicht", "Pensioengat Calculator", "Vermogensgroei"]
+    wb._sheets = [wb[naam] for naam in volgorde]
 
     wb.properties.title = "Geldplanner — persoonlijke financien"
-    wb.properties.subject = "Cashflow, ZZP-belasting, pensioengat en vermogensgroei"
+    wb.properties.subject = "Dashboard, cashflow, pensioengat en vermogensgroei"
     wb.properties.creator = "Geldplanner"
     wb.properties.description = DISCLAIMER + "."
     wb.properties.language = "nl-NL"
